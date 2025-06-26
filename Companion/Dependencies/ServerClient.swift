@@ -379,22 +379,56 @@ extension DependencyValues {
         switch server.configuration.transportType {
         case .stdio:
             #if os(macOS)
-                let path = server.configuration.command ?? ""
+                let command = server.configuration.command ?? ""
                 let args = server.configuration.arguments ?? []
-                let env = ProcessInfo.processInfo.environment
-                
+                var env = ProcessInfo.processInfo.environment
+
+                // Set custom PATH for homebrew, standard locations, and common dev tools
+                let homePath = FileManager.default.homeDirectoryForCurrentUser.path
+                env["PATH"] = [
+                    "/opt/homebrew/opt/postgresql@17/bin",
+                    "/opt/homebrew/bin",
+                    "/opt/homebrew/sbin",
+                    "/opt/homebrew/opt/asdf/libexec/bin",
+                    "/usr/local/bin",
+                    "/usr/bin",
+                    "/bin",
+                    "/usr/sbin",
+                    "/sbin",
+                    "/usr/local/sbin",
+                    "/opt/local/bin",
+                    "/opt/local/sbin",
+                    "\(homePath)/.local/bin",
+                    "\(homePath)/.cargo/bin",
+                    "\(homePath)/.asdf/shims",
+                    "\(homePath)/.pyenv/shims",
+                    "\(homePath)/.rbenv/shims",
+                    "\(homePath)/.bun/bin"
+                ].joined(separator: ":")
+
+                // Apply any custom environment variables from server config
+                if case .stdio(let stdioConfig) = server.configuration,
+                   let customEnv = stdioConfig.env {
+                    for (key, value) in customEnv {
+                        env[key] = value
+                    }
+                }
+
+                // Use shell wrapper to properly resolve PATH
+                let shellCommand = args.isEmpty ? command : "\(command) \(args.joined(separator: " "))"
+
                 print("ServerClient: Setting up STDIO transport")
-                print("ServerClient: Command: \(path)")
-                print("ServerClient: Arguments: \(args)")
-                print("ServerClient: Environment: \(env)")
+                print("ServerClient: Shell command: \(shellCommand)")
+                print("ServerClient: Environment PATH: \(env["PATH"] ?? "nil")")
 
                 let process = Process()
                 let stdInPipe = Pipe()
                 let stdOutPipe = Pipe()
 
-                process.executableURL = URL(fileURLWithPath: path)
-                process.arguments = args
+                process.executableURL = URL(fileURLWithPath: "/bin/sh")
+                process.arguments = ["-c", shellCommand]
                 process.environment = env
+                process.currentDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 process.standardInput = stdInPipe
                 process.standardOutput = stdOutPipe
                 process.standardError = Pipe()
@@ -421,7 +455,7 @@ extension DependencyValues {
             guard let url = URL(string: urlString) else {
                 throw MCPError.invalidURL(urlString)
             }
-            
+
             print("ServerClient: Setting up HTTP transport to \(url)")
 
             // Basic connectivity check for HTTP endpoints
