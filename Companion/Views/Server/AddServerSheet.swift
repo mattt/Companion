@@ -37,6 +37,19 @@ struct AddServerSheet: View {
             return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         #endif
     }
+    
+    private var canTestConnection: Bool {
+        #if os(macOS)
+            switch transportType {
+            case .stdio:
+                return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .http:
+                return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        #else
+            return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        #endif
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -100,7 +113,7 @@ struct AddServerSheet: View {
                         testAction: { testConnection() },
                         cancelAction: { store.send(.cancelTest) }
                     )
-                    .disabled(!isValid && !store.isTesting)
+                    .disabled(!canTestConnection && !store.isTesting)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 20)
@@ -206,7 +219,6 @@ struct AddServerSheet: View {
 
     private func testConnection() {
         let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
 
         let configuration: ConfigFile.Entry
 
@@ -236,7 +248,7 @@ struct AddServerSheet: View {
         #endif
 
         let testServer = Server(
-            name: trimmedName,
+            name: trimmedName.isEmpty ? "Test Server" : trimmedName,
             configuration: configuration
         )
 

@@ -237,7 +237,7 @@ struct TestConnectionSection: View {
     let testAction: () -> Void
     let cancelAction: () -> Void
 
-    @State private var showDetails = false
+
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -260,7 +260,8 @@ struct TestConnectionSection: View {
                 if isTesting {
                     HStack(spacing: 8) {
                         ProgressView()
-                            .scaleEffect(0.8)
+                            .scaleEffect(0.4)
+                            .frame(width: 16, height: 16)
                         Text("Testing connection...")
                             .foregroundColor(.secondary)
                     }
@@ -268,6 +269,7 @@ struct TestConnectionSection: View {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
+                            .frame(width: 16, height: 16)
                         Text("Connection successful")
                             .foregroundColor(.secondary)
                     }
@@ -275,6 +277,7 @@ struct TestConnectionSection: View {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.red)
+                            .frame(width: 16, height: 16)
                         Text("Connection failed")
                             .foregroundColor(.secondary)
                     }
@@ -283,35 +286,28 @@ struct TestConnectionSection: View {
 
             // Error details (if any)
             if let error = errorMessage {
-                DisclosureGroup(
-                    isExpanded: $showDetails,
-                    content: {
-                        ScrollView {
-                            Text(error)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(8)
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(6)
-                        }
-                        .frame(maxHeight: 100)
-                    },
-                    label: {
-                        Text("Show Details")
-                            .font(.caption)
-                            .foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Error Details")
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                    
+                    ScrollView {
+                        Text(error)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.red)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(6)
                     }
-                )
+                    .frame(height: 80)
+                }
             }
 
             // Help text
             if hasSucceeded {
                 Text("The server responded successfully and is ready to use.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } else if !isTesting && errorMessage == nil {
-                Text("Test the connection to verify server configuration before saving.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

@@ -62,6 +62,19 @@ struct EditServerSheet: View {
             return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         #endif
     }
+    
+    private var canTestConnection: Bool {
+        #if os(macOS)
+            switch transportType {
+            case .stdio:
+                return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .http:
+                return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+        #else
+            return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        #endif
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -125,7 +138,7 @@ struct EditServerSheet: View {
                         },
                         cancelAction: { store.send(.connectionTest(.cancelTest)) }
                     )
-                    .disabled(!isValid && !store.connectionTest.isTesting)
+                    .disabled(!canTestConnection && !store.connectionTest.isTesting)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 20)
