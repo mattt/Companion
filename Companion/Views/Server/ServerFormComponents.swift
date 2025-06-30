@@ -95,11 +95,16 @@ struct TransportTypeCard: View {
                 Text(type.displayName)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
+                    .lineLimit(1)
 
                 Text(type.description)
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(minWidth: 120)
 
             Spacer()
 
@@ -237,8 +242,6 @@ struct TestConnectionSection: View {
     let testAction: () -> Void
     let cancelAction: () -> Void
 
-
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Test button and status
@@ -301,7 +304,6 @@ struct TestConnectionSection: View {
                             .background(Color.red.opacity(0.1))
                             .cornerRadius(6)
                     }
-                    .frame(height: 80)
                 }
             }
 
