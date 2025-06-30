@@ -29,6 +29,13 @@ It's built using the
 First, [download the Companion app](https://github.com/loopwork/Companion/releases/latest/download/Companion.zip)
 (requires macOS 15 or later).
 
+Or, if you have [Homebrew](https://brew.sh) installed,
+you can run the following command:
+
+```console
+brew install --cask loopwork/tap/iMCP
+```
+
 <img align="right" width="344" src="/Assets/companion-macos-add-server.png" alt="Screenshot of Companion on macOS showing Add server sheet" />
 
 When you open the app,
