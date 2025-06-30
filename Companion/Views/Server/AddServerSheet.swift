@@ -203,7 +203,7 @@ struct AddServerSheet: View {
 
             case .http:
                 let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedUrl.isEmpty else { return }
+
 
                 configuration = ConfigFile.Entry(http: trimmedUrl)
             }
@@ -226,7 +226,6 @@ struct AddServerSheet: View {
             switch transportType {
             case .stdio:
                 let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedCommand.isEmpty else { return }
 
                 let trimmedArgs = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                 let argArray =
@@ -236,7 +235,7 @@ struct AddServerSheet: View {
 
             case .http:
                 let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedUrl.isEmpty else { return }
+
 
                 configuration = ConfigFile.Entry(http: trimmedUrl)
             }
