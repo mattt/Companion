@@ -148,17 +148,27 @@ struct ServerDetailView: View {
 //                    } else {
                         ToolbarItemGroup(placement: .navigation) {
                             ServerInfoToolbarContent(server: server)
+                            Spacer()
                         }
 //                    }
                 #else
                     ToolbarItemGroup(placement: .navigation) {
                         ServerInfoToolbarContent(server: server)
+                        Spacer()
                     }
                 #endif
-                // Connection status and action buttons in trailing toolbar
-                ToolbarItemGroup(placement: .primaryAction) {
-                    Spacer()
-                    ServerToolbarActions(
+                
+                // Connection status as separate toolbar item
+                ToolbarItem(placement: .automatic) {
+                    ServerConnectionStatus(
+                        isConnected: isConnected,
+                        isConnecting: isConnecting
+                    )
+                }
+                
+                // Action menu as separate toolbar item
+                ToolbarItem(placement: .primaryAction) {
+                    ServerActionMenu(
                         isConnected: isConnected,
                         isConnecting: isConnecting,
                         onConnect: { store.send(.connect) },
@@ -191,6 +201,7 @@ private struct ServerInfoToolbarContent: View {
             Text(server.name)
                 .font(.headline)
                 .fontWeight(.semibold)
+                .lineLimit(1)
 
             Text(server.configuration.displayValue)
                 .font(.system(.caption, design: .monospaced))
@@ -203,7 +214,29 @@ private struct ServerInfoToolbarContent: View {
     }
 }
 
-private struct ServerToolbarActions: View {
+private struct ServerConnectionStatus: View {
+    let isConnected: Bool
+    let isConnecting: Bool
+    
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(
+                systemName: isConnecting
+                    ? "clock.circle.fill" : (isConnected ? "circle.fill" : "circle")
+            )
+            .foregroundColor(isConnecting ? .orange : (isConnected ? .green : .red))
+            .font(.system(size: 10))
+            Text(
+                isConnecting
+                    ? "Connecting..." : (isConnected ? "Connected" : "Disconnected")
+            )
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
+    }
+}
+
+private struct ServerActionMenu: View {
     let isConnected: Bool
     let isConnecting: Bool
     let onConnect: () -> Void
@@ -212,73 +245,50 @@ private struct ServerToolbarActions: View {
     let onEdit: () -> Void
 
     var body: some View {
-        HStack {
-            // Connection status (non-interactive)
-            HStack(spacing: 4) {
-                Image(
-                    systemName: isConnecting
-                        ? "clock.circle.fill" : (isConnected ? "circle.fill" : "circle")
-                )
-                .foregroundColor(isConnecting ? .orange : (isConnected ? .green : .red))
-                .font(.system(size: 10))
-                Text(
-                    isConnecting
-                        ? "Connecting..." : (isConnected ? "Connected" : "Disconnected")
-                )
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
-            .padding(.leading, 12)
-            .padding(.vertical, 4)
-            .cornerRadius(6)
-
-            // Actions menu
-            Menu {
-                Button {
-                    onEdit()
-                } label: {
-                    Label("Edit Server", systemImage: "square.and.pencil")
-                }
-
-                if isConnected {
-                    Divider()
-
-                    Button {
-                        Task {
-                            onDisconnect()
-                            try await Task.sleep(for: .milliseconds(100))
-                            onConnect()
-                        }
-                    } label: {
-                        Label("Restart", systemImage: "arrow.clockwise")
-                    }
-
-                    Button {
-                        onDisconnect()
-                    } label: {
-                        Label("Disconnect", systemImage: "bolt.fill")
-                    }
-                } else {
-                    Divider()
-
-                    Button {
-                        if isConnecting {
-                            onCancel()
-                        } else {
-                            onConnect()
-                        }
-                    } label: {
-                        Text(isConnecting ? "Cancel" : "Connect")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
+        Menu {
+            Button {
+                onEdit()
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Label("Edit Server", systemImage: "square.and.pencil")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .padding(.trailing, 8)
+
+            if isConnected {
+                Divider()
+
+                Button {
+                    Task {
+                        onDisconnect()
+                        try await Task.sleep(for: .milliseconds(100))
+                        onConnect()
+                    }
+                } label: {
+                    Label("Restart", systemImage: "arrow.clockwise")
+                }
+
+                Button {
+                    onDisconnect()
+                } label: {
+                    Label("Disconnect", systemImage: "bolt.fill")
+                }
+            } else {
+                Divider()
+
+                Button {
+                    if isConnecting {
+                        onCancel()
+                    } else {
+                        onConnect()
+                    }
+                } label: {
+                    Text(isConnecting ? "Cancel" : "Connect")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
     }
 }
 
