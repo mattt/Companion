@@ -33,7 +33,7 @@ Or, if you have [Homebrew](https://brew.sh) installed,
 you can run the following command:
 
 ```console
-brew install --cask loopwork/tap/iMCP
+brew install --cask loopwork/tap/Companion
 ```
 
 <img align="right" width="344" src="/Assets/companion-macos-add-server.png" alt="Screenshot of Companion on macOS showing Add server sheet" />
