@@ -238,6 +238,8 @@ struct AppFeature {
                 case .edit:
                     guard let serverDetail = state.serverDetails?[id: id] else { return .none }
                     return .send(.presentEditServer(serverDetail.server))
+                case .deselectServer:
+                    return .send(.selectionChanged(nil))
                 default:
                     // Handle the action in the focused ServerDetailFeature
                     guard var serverDetail = state.serverDetails?[id: id] else { return .none }

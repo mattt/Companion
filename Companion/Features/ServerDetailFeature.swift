@@ -45,6 +45,7 @@ struct ServerDetailFeature {
         case restart
         case edit
         case refresh
+        case deselectServer
 
         // Internal actions for state updates
         case connectionStarted
@@ -92,6 +93,7 @@ struct ServerDetailFeature {
                 return .run { [id = state.server.id] send in
                     do {
                         try await serverClient.disconnect(id, true)
+                        await send(.deselectServer)
                     } catch {
                         await send(.connectionFailed(error.localizedDescription))
                     }
@@ -175,6 +177,10 @@ struct ServerDetailFeature {
 
             case .errorCleared:
                 state.error = nil
+                return .none
+
+            case .deselectServer:
+                // This will be handled by parent to deselect server
                 return .none
             }
         }
