@@ -36,7 +36,12 @@ struct ConfigFile {
 
 extension SharedKey where Self == FileStorageKey<ConfigFile> {
     static var serversConfig: Self {
-        fileStorage(.documentsDirectory.appending(component: "servers.json"))
+        fileStorage(
+            .applicationSupportDirectory
+                .appending(
+                    component: Bundle.main.bundleIdentifier ?? "com.loopwork.Companion"
+                ).appending(component: "servers.json")
+        )
     }
 }
 
