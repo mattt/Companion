@@ -744,12 +744,6 @@ extension DependencyValues {
             throw MCPError.notConnected
         }
 
-        // Verify the resource exists on this server
-        guard connection.resources.contains(where: { $0.uri == resourceUri }) else {
-            print("  ERROR: Resource '\(resourceUri)' not found on server")
-            throw MCPError.resourceNotFound(resourceUri)
-        }
-
         do {
             // Read the resource from the MCP server
             print("  Reading resource from server...")

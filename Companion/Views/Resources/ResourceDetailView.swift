@@ -241,43 +241,8 @@ struct ResourceDetailView: View {
                         .cornerRadius(10)
                     #endif
                 } else {
-                    // Template information section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Template Usage", systemImage: "text.bubble")
-                            .font(.headline)
-
-                        VStack(spacing: 12) {
-                            Image(systemName: "text.bubble")
-                                .font(.largeTitle)
-                                .foregroundColor(.orange)
-
-                            Text("Resource Template")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-
-                            Text(
-                                "This is a URI template that can accept parameters to generate specific resource URIs."
-                            )
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 200)
-                        #if os(visionOS)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                        #else
-                            .background(.fill.tertiary)
-                            .cornerRadius(8)
-                        #endif
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    #if os(visionOS)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    #else
-                        .background(.fill.secondary)
-                        .cornerRadius(10)
-                    #endif
+                    // Template form and preview section
+                    ResourceTemplateView(store: store)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

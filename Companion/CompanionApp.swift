@@ -8,7 +8,7 @@ struct CompanionApp: App {
             ContentView(
                 store: Store(initialState: AppFeature.State()) {
                     AppFeature()
-                        ._printChanges()
+//                        ._printChanges()
                 }
             )
         }
