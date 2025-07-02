@@ -23,30 +23,51 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(store: store)
-                #if os(macOS)
-                    .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
-                #endif
-        } detail: {
-            let selection = store.selection
-            let server = selection.flatMap { sel in
-                store.servers.first(where: { $0.id == sel.serverId })
+        Group {
+            if store.servers.isEmpty {
+                WelcomeView(onAddServer: {
+                    store.send(.presentAddServer)
+                }, onAddExampleServer: {
+                    store.send(.addExampleServer)
+                })
+            } else {
+                NavigationSplitView(columnVisibility: $columnVisibility) {
+                    SidebarView(store: store)
+                        #if os(macOS)
+                            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
+                        #endif
+                } detail: {
+                    let selection = store.selection
+                    let server = selection.flatMap { sel in
+                        store.servers.first(where: { $0.id == sel.serverId })
+                    }
+                    DetailView(
+                        selection: selection,
+                        server: server,
+                        store: createServerDetailStore(
+                            from: store, selection: selection, server: server),
+                        columnVisibility: columnVisibility
+                    )
+                    #if os(macOS)
+                        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+                    #endif
+                }
+                .navigationSplitViewStyle(.balanced)
             }
-            DetailView(
-                selection: selection,
-                server: server,
-                store: createServerDetailStore(
-                    from: store, selection: selection, server: server),
-                columnVisibility: columnVisibility
-            )
-            #if os(macOS)
-                .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-            #endif
         }
-        .navigationSplitViewStyle(.balanced)
         .task {
             store.send(.task)
+        }
+        .sheet(
+            store: store.scope(state: \.$addServer, action: \.addServerPresentation)
+        ) { addServerStore in
+            AddServerSheet(
+                isPresented: .constant(true),
+                onAdd: { name, transport in
+                    addServerStore.send(.addServer(name: name, transport: transport))
+                },
+                onCancel: { addServerStore.send(.dismiss) }
+            )
         }
         #if os(macOS)
             .frame(minWidth: 800, idealWidth: 1200, maxWidth: .infinity, maxHeight: .infinity)

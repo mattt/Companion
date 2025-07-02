@@ -36,6 +36,7 @@ struct AppFeature {
         case loadingChanged(Bool)
         case errorOccurred(String?)
         case presentAddServer
+        case addExampleServer
         case addServerPresentation(PresentationAction<AddServerFeature.Action>)
         case presentEditServer(Server)
         case editServer(PresentationAction<EditServerFeature.Action>)
@@ -189,6 +190,18 @@ struct AppFeature {
             case .presentAddServer:
                 state.addServer = AddServerFeature.State()
                 return .none
+
+            case .addExampleServer:
+                let exampleServer = Server(
+                    name: "Everything",
+                    configuration: .init(stdio: "npx", arguments: ["-y", "@modelcontextprotocol/server-everything"])
+                )
+                print("AppFeature: Adding example server '\(exampleServer.name)'")
+                return .run { send in
+                    await serverClient.addServer(exampleServer)
+                    print("AppFeature: Example server added, now auto-connecting...")
+                    await send(.serverDetail(id: exampleServer.id, action: .connect))
+                }
 
             case .addServerPresentation(.presented(.addServer(let name, let transport))):
                 let newServer = Server(
