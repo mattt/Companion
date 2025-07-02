@@ -25,7 +25,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if store.serverDetails == nil && showProgress {
+            if store.serverDetails == nil {
                 ProgressView("Loading servers...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .opacity(showProgress ? 1 : 0)
