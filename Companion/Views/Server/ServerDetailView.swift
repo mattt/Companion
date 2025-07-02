@@ -96,45 +96,12 @@ struct ServerDetailView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "bolt")
-                            .font(.system(size: 48))
-                            .foregroundColor(isConnecting ? .orange : .secondary)
-                            .symbolEffect(
-                                .pulse, options: isConnecting ? .repeat(.continuous) : .nonRepeating
-                            )
-                            .id("connecting-\(isConnecting)")
-
-                        Text(isConnecting ? "Connecting..." : "Disconnected")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-
-                        HStack(spacing: 12) {
-                            if isConnecting {
-                                Button {
-                                    store.send(.cancel)
-                                } label: {
-                                    Text("Cancel")
-                                }
-                                .buttonStyle(.borderedProminent)
-                            } else {
-                                Button {
-                                    store.send(.connect)
-                                } label: {
-                                    Text("Connect")
-                                }
-                                .buttonStyle(.borderedProminent)
-
-                                Button {
-                                    store.send(.edit)
-                                } label: {
-                                    Text("Edit")
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ServerConnectionStateView(
+                        isConnecting: isConnecting,
+                        onConnect: { store.send(.connect) },
+                        onCancel: { store.send(.cancel) },
+                        onEdit: { store.send(.edit) }
+                    )
                 }
             }
             .toolbar {
@@ -157,7 +124,7 @@ struct ServerDetailView: View {
                         Spacer()
                     }
                 #endif
-                
+
                 // Connection status as separate toolbar item
                 ToolbarItem(placement: .automatic) {
                     ServerConnectionStatus(
@@ -165,7 +132,7 @@ struct ServerDetailView: View {
                         isConnecting: isConnecting
                     )
                 }
-                
+
                 // Action menu as separate toolbar item
                 ToolbarItem(placement: .primaryAction) {
                     ServerActionMenu(
@@ -217,7 +184,7 @@ private struct ServerInfoToolbarContent: View {
 private struct ServerConnectionStatus: View {
     let isConnected: Bool
     let isConnecting: Bool
-    
+
     var body: some View {
         HStack(spacing: 4) {
             Image(
@@ -292,8 +259,6 @@ private struct ServerActionMenu: View {
     }
 }
 
-
-
 struct ServerInformationView: View {
     let server: Server
     let serverStatus: Server.Status
@@ -342,10 +307,10 @@ struct ServerInformationView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
                 #if os(visionOS)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
                 #else
-                .background(.fill.secondary)
-                .cornerRadius(10)
+                    .background(.fill.secondary)
+                    .cornerRadius(10)
                 #endif
             #endif
 
@@ -425,10 +390,10 @@ struct ServerInformationView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             #if os(visionOS)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             #else
-            .background(.fill.secondary)
-            .cornerRadius(10)
+                .background(.fill.secondary)
+                .cornerRadius(10)
             #endif
 
             // Capabilities
@@ -447,10 +412,10 @@ struct ServerInformationView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             #if os(visionOS)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             #else
-            .background(.fill.secondary)
-            .cornerRadius(10)
+                .background(.fill.secondary)
+                .cornerRadius(10)
             #endif
 
             // Server Instructions
@@ -472,15 +437,73 @@ struct ServerInformationView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             #if os(visionOS)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
             #else
-            .background(.fill.secondary)
-            .cornerRadius(10)
+                .background(.fill.secondary)
+                .cornerRadius(10)
             #endif
 
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
+    }
+}
+
+private struct ServerConnectionStateView: View {
+    let isConnecting: Bool
+    let onConnect: () -> Void
+    let onCancel: () -> Void
+    let onEdit: () -> Void
+
+    var body: some View {
+        VStack(spacing: 48) {
+            VStack(spacing: 16) {
+                if isConnecting {
+                    Image(systemName: "bolt.badge.clock.fill")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                        .symbolEffect(.pulse, options: .repeat(.continuous))
+
+                    Text("Connecting...")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                } else {
+                    Image(systemName: "bolt")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+
+                    Text("Disconnected")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            HStack(spacing: 12) {
+                if isConnecting {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Text("Cancel")
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button {
+                        onConnect()
+                    } label: {
+                        Text("Connect")
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button {
+                        onEdit()
+                    } label: {
+                        Text("Edit")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
