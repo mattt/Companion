@@ -7,7 +7,7 @@ struct ResourceTemplateView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Template Usage", systemImage: "text.bubble")
+            Label("Content", systemImage: "text.bubble")
                 .font(.headline)
 
             // Template arguments form
@@ -25,7 +25,23 @@ struct ResourceTemplateView: View {
                 .background(.fill.tertiary)
                 .cornerRadius(8)
             } else if let result = store.resourceReadResult {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label(
+                            "Success",
+                            systemImage: "checkmark.circle.fill"
+                        )
+                        .foregroundColor(.green)
+                        .font(.headline)
+
+                        Spacer()
+
+                        Button("Clear") {
+                            store.send(.dismissResult)
+                        }
+                        .font(.caption)
+                    }
+
                     // Show resolved URI
                     if let template = store.template {
                         VStack(alignment: .leading, spacing: 4) {
@@ -56,27 +72,13 @@ struct ResourceTemplateView: View {
                     )
                     ContentPreviewView(content: content, mimeType: store.template?.mimeType)
                 }
-            } else {
-                // Default template explanation
-                VStack(spacing: 12) {
-                    Image(systemName: "text.bubble")
-                        .font(.largeTitle)
-                        .foregroundColor(.orange)
-
-                    Text("Resource Template")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-
-                    Text(
-                        "Fill in the parameters above and click 'Read Template' to load the resource content."
-                    )
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-                .background(.fill.tertiary)
-                .cornerRadius(8)
+                .padding()
+                #if os(visionOS)
+                    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 8))
+                #else
+                    .background(.fill.quaternary)
+                    .cornerRadius(8)
+                #endif
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,85 +125,37 @@ struct ResourceTemplateView: View {
                 .cornerRadius(8)
             }
 
-            // Read template section with error handling
-            readTemplateSection()
+            // Submit button
+            if store.isReadingResource {
+                Button(action: { store.send(.cancelResourceRead) }) {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+            } else {
+                Button(action: { store.send(.readTemplateTapped) }) {
+                    Text("Submit")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(store.serverId == nil || !allParametersHaveValues)
+            }
         }
     }
 
-    @ViewBuilder
-    private func readTemplateSection() -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Read template button and status
-            HStack {
-                if store.isReadingResource {
-                    Button("Cancel", action: { store.send(.cancelResourceRead) })
-                        .foregroundColor(.red)
-                } else {
-                    Button(action: { store.send(.readTemplateTapped) }) {
-                        HStack {
-                            Image(systemName: "doc.text")
-                            Text("Read Template")
-                        }
-                    }
-                    .disabled(store.serverId == nil)
-                }
+    private var allParametersHaveValues: Bool {
+        let parameters = extractTemplateParameters(from: store.template?.uriTemplate ?? "")
 
-                Spacer()
-
-                if store.isReadingResource {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .scaleEffect(0.4)
-                            .frame(width: 16, height: 16)
-                        Text("Loading content...")
-                            .foregroundColor(.secondary)
-                    }
-                } else if store.resourceReadResult != nil {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .frame(width: 16, height: 16)
-                        Text("Content loaded")
-                            .foregroundColor(.secondary)
-                    }
-                } else if store.errorMessage != nil {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
-                            .frame(width: 16, height: 16)
-                        Text("Loading failed")
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-
-            // Error details (if any)
-            if let error = store.errorMessage {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Error Details")
-                        .font(.caption)
-                        .foregroundColor(.primary)
-
-                    ScrollView {
-                        Text(error)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.red)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(6)
-                    }
-                }
+        for parameter in parameters {
+            let value = store.templateArguments[parameter] ?? ""
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return false
             }
         }
-        .padding()
-        #if os(macOS)
-            .background(Color(NSColor.controlBackgroundColor))
-        #else
-            .background(Color(UIColor.secondarySystemBackground))
-        #endif
-        .cornerRadius(8)
+
+        return true
     }
 
     private func extractTemplateParameters(from template: String) -> [String] {

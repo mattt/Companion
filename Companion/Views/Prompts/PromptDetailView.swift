@@ -14,90 +14,76 @@ struct PromptDetailView: View {
     }
 
     var body: some View {
-        WithViewStore(store, observe: { $0 }) { viewStore in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        // Title
-                        #if os(macOS)
-                            Text(viewStore.prompt.name)
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .textSelection(.enabled)
-                        #endif
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    // Title
+                    #if os(macOS)
+                        Text(store.prompt.name)
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .textSelection(.enabled)
+                    #endif
 
-                        // Description (if available)
-                        if let description = viewStore.prompt.description, !description.isEmpty {
-                            Text(description)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .textSelection(.enabled)
+                    // Description (if available)
+                    if let description = store.prompt.description, !description.isEmpty {
+                        Text(description)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+
+                // Interactive Form
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Use Prompt", systemImage: "play.rectangle")
+                        .font(.headline)
+
+                    if let arguments = store.prompt.arguments, !arguments.isEmpty {
+                        ForEach(arguments, id: \.name) { argument in
+                            ArgumentInputView(
+                                argument: argument,
+                                value: store.argumentValues[argument.name] ?? "",
+                                onValueChange: { newValue in
+                                    store.send(.argumentChanged(argument.name, newValue))
+                                }
+                            )
                         }
+                    } else {
+                        Text("This prompt has no arguments")
+                            .font(.body)
+                            .foregroundColor(.secondary)
                     }
 
-                    // Interactive Form
-                    VStack(alignment: .leading, spacing: 12) {
-                        Label("Test Prompt", systemImage: "play.rectangle")
-                            .font(.headline)
-
-                        if let arguments = viewStore.prompt.arguments, !arguments.isEmpty {
-                            ForEach(arguments, id: \.name) { argument in
-                                ArgumentInputView(
-                                    argument: argument,
-                                    value: viewStore.argumentValues[argument.name] ?? "",
-                                    onValueChange: { newValue in
-                                        viewStore.send(.argumentChanged(argument.name, newValue))
-                                    }
-                                )
-                            }
-                        } else {
-                            Text("This prompt has no arguments")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                        }
-
-                        Button(action: { viewStore.send(.usePromptTapped) }) {
-                            HStack {
-                                if viewStore.isCallingPrompt {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "play.fill")
-                                }
-                                Text(viewStore.isCallingPrompt ? "Getting Prompt..." : "Use Prompt")
-                            }
-                            .frame(maxWidth: .infinity)
+                    if store.isCallingPrompt {
+                        Button(action: { store.send(.cancelPromptCall) }) {
+                            Label("Cancel", systemImage: "xmark.circle.fill")
+                                .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .disabled(
-                            viewStore.isCallingPrompt
-                                || (viewStore.prompt.arguments?.contains { $0.required == true }
-                                    == true && !viewStore.allRequiredArgumentsProvided)
-                        )
-
+                    } else {
+                        Button(action: { store.send(.usePromptTapped) }) {
+                            Text("Submit")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .disabled(store.serverId == nil)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    #if os(visionOS)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    #else
-                        .background(.fill.secondary)
-                        .cornerRadius(10)
-                    #endif
 
                     // Prompt Result
-                    if let result = viewStore.promptCallResult {
+                    if let result = store.promptCallResult {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Label("Prompt Result", systemImage: "checkmark.circle.fill")
+                                Label("Success", systemImage: "checkmark.circle.fill")
                                     .font(.headline)
                                     .foregroundColor(.green)
 
                                 Spacer()
 
                                 Button("Clear") {
-                                    viewStore.send(.dismissResult)
+                                    store.send(.dismissResult)
                                 }
                                 .font(.caption)
                             }
@@ -155,9 +141,17 @@ struct PromptDetailView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
+                #if os(visionOS)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                #else
+                    .background(.fill.secondary)
+                    .cornerRadius(10)
+                #endif
             }
-            .navigationTitle(viewStore.prompt.name)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
         }
+        .navigationTitle(store.prompt.name)
     }
 
     private func formatMessageContent(_ content: Prompt.Message.Content) -> String {

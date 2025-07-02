@@ -186,24 +186,6 @@ struct ResourceDetailView: View {
                                 data: extractBinaryContent(from: result.contents)
                             )
                             ContentPreviewView(content: content, mimeType: displayMimeType)
-                        } else if store.isTemplate {
-                            // Templates cannot be previewed
-                            VStack(spacing: 12) {
-                                Image(systemName: "text.bubble")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.orange)
-
-                                Text("Template Preview")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-
-                                Text("Templates cannot be previewed")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, minHeight: 200)
-                            .background(.fill.tertiary)
-                            .cornerRadius(8)
                         } else {
                             // Show the load content button for resources
                             VStack(spacing: 12) {
@@ -627,3 +609,5 @@ private struct InfoRow: View {
         }
     }
 }
+
+
