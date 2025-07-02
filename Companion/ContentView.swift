@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     let store: StoreOf<AppFeature>
     @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @State private var showProgress = false
 
     private func createServerDetailStore(
         from store: StoreOf<AppFeature>, selection: SidebarSelection?, server: Server?
@@ -24,9 +25,11 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if store.serverDetails == nil {
+            if store.serverDetails == nil && showProgress {
                 ProgressView("Loading servers...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(showProgress ? 1 : 0)
+                    .animation(.easeIn(duration: 0.3), value: showProgress)
             } else if store.servers.isEmpty {
                 WelcomeView(onAddServer: {
                     store.send(.presentAddServer)
@@ -60,6 +63,12 @@ struct ContentView: View {
         }
         .task {
             store.send(.task)
+            
+            // Delay showing progress to avoid flash
+            try? await Task.sleep(for: .milliseconds(300))
+            if store.serverDetails == nil {
+                showProgress = true
+            }
         }
         .sheet(
             store: store.scope(state: \.$addServer, action: \.addServerPresentation)
