@@ -235,21 +235,26 @@ private struct ServerActionMenu: View {
                 Button {
                     onDisconnect()
                 } label: {
-                    Label("Disconnect", systemImage: "bolt.fill")
+                    Label("Disconnect", systemImage: "bolt.slash")
                 }
             } else {
                 Divider()
 
-                Button {
-                    if isConnecting {
+                if isConnecting {
+                    Button {
                         onCancel()
-                    } else {
-                        onConnect()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
                     }
-                } label: {
-                    Text(isConnecting ? "Cancel" : "Connect")
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button {
+                        onConnect()
+                    } label: {
+                        Label("Connect", systemImage: "bolt")
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
             }
         } label: {
             Image(systemName: "ellipsis.circle")
