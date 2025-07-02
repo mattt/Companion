@@ -18,7 +18,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            let sidebarItems = buildSidebarItems(from: store.serverDetails)
+            let sidebarItems = buildSidebarItems(from: store.serverDetails ?? [])
 
             List(selection: selectionBinding) {
                 listContent(items: sidebarItems)
@@ -83,7 +83,7 @@ struct SidebarView: View {
         ForEach(items, id: \.id) { sidebarItem in
             if case .server(let server) = sidebarItem {
                 Section {
-                    if let serverDetail = store.serverDetails[id: server.id],
+                    if let serverDetail = store.serverDetails?[id: server.id],
                         serverDetail.isConnected
                     {
                         if expandedServers.contains(server.id) {
@@ -140,7 +140,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func connectionPromptRow(server: Server) -> some View {
         Button {
-            if let serverDetail = store.serverDetails[id: server.id] {
+            if let serverDetail = store.serverDetails?[id: server.id] {
                 if serverDetail.isConnecting {
                     store.send(.serverDetail(id: server.id, action: .cancel))
                 } else {
@@ -149,7 +149,7 @@ struct SidebarView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                if let serverDetail = store.serverDetails[id: server.id],
+                if let serverDetail = store.serverDetails?[id: server.id],
                     serverDetail.isConnecting
                 {
                     ProgressView()
@@ -172,7 +172,7 @@ struct SidebarView: View {
                 }
 
                 Text(
-                    store.serverDetails[id: server.id]?.isConnecting == true
+                    store.serverDetails?[id: server.id]?.isConnecting == true
                         ? "Connecting..."
                         : "Connect to Server"
                 )
@@ -307,7 +307,7 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 // Add connection status indicator for server items
                 if case .server(let server) = sidebarItem,
-                    let serverDetail = store.serverDetails[id: server.id]
+                    let serverDetail = store.serverDetails?[id: server.id]
                 {
                     #if os(macOS)
                         ConnectionButton(
@@ -372,7 +372,7 @@ struct SidebarView: View {
 
         .contextMenu {
             if case .server(let server) = sidebarItem {
-                if let serverDetail = store.serverDetails[id: server.id] {
+                if let serverDetail = store.serverDetails?[id: server.id] {
                     if serverDetail.isConnected {
                         Button("Disconnect") {
                             store.send(.serverDetail(id: server.id, action: .disconnect))
@@ -418,7 +418,7 @@ struct SidebarView: View {
                             .lineLimit(1)
 
                         // Show connection status
-                        if let serverDetail = store.serverDetails[id: server.id] {
+                        if let serverDetail = store.serverDetails?[id: server.id] {
                             ServerConnectionStatusView(
                                 serverId: server.id,
                                 status: serverDetail.serverStatus,
@@ -462,7 +462,7 @@ struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .contextMenu {
-                if let serverDetail = store.serverDetails[id: server.id] {
+                if let serverDetail = store.serverDetails?[id: server.id] {
                     if serverDetail.isConnected {
                         Button("Disconnect") {
                             store.send(.serverDetail(id: server.id, action: .disconnect))
@@ -500,7 +500,7 @@ struct SidebarView: View {
                         .foregroundColor(.secondary)
                         .tracking(0.5)
 
-                    if let serverDetail = store.serverDetails[id: server.id],
+                    if let serverDetail = store.serverDetails?[id: server.id],
                         serverDetail.isConnected
                     {
                         Spacer()
@@ -573,7 +573,7 @@ struct SidebarView: View {
             )
         #endif
         .contextMenu {
-            if let serverDetail = store.serverDetails[id: server.id] {
+            if let serverDetail = store.serverDetails?[id: server.id] {
                 if serverDetail.isConnected {
                     Button("Disconnect") {
                         store.send(.serverDetail(id: server.id, action: .disconnect))
