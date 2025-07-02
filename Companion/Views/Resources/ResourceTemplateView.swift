@@ -7,7 +7,7 @@ struct ResourceTemplateView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Content", systemImage: "text.bubble")
+            Label("Read Templated Resource", systemImage: "doc.text")
                 .font(.headline)
 
             // Template arguments form

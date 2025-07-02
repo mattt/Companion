@@ -167,8 +167,25 @@ struct ResourceDetailView: View {
                 // Content Preview (only for regular resources, not templates)
                 if !isTemplate {
                     VStack(alignment: .leading, spacing: 12) {
-                        Label("Content Preview", systemImage: "eye")
+                        Label("Read Resource", systemImage: "doc.text")
                             .font(.headline)
+
+                        if store.isReadingResource {
+                            Button(action: { store.send(.cancelResourceRead) }) {
+                                Label("Cancel", systemImage: "xmark.circle.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                        } else {
+                            Button(action: { store.send(.readResourceTapped) }) {
+                                Text("Submit")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                            .disabled(store.serverId == nil)
+                        }
 
                         if store.isReadingResource {
                             HStack {
@@ -181,37 +198,36 @@ struct ResourceDetailView: View {
                             .background(.fill.tertiary)
                             .cornerRadius(8)
                         } else if let result = store.resourceReadResult {
-                            let content = ResourceContent(
-                                text: extractTextContent(from: result.contents),
-                                data: extractBinaryContent(from: result.contents)
-                            )
-                            ContentPreviewView(content: content, mimeType: displayMimeType)
-                        } else {
-                            // Show the load content button for resources
-                            VStack(spacing: 12) {
-                                Image(systemName: "doc.text")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.secondary)
-
-                                Text("Preview not available")
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Label(
+                                        "Success",
+                                        systemImage: "checkmark.circle.fill"
+                                    )
+                                    .foregroundColor(.green)
                                     .font(.headline)
-                                    .foregroundColor(.secondary)
 
-                                Text("Content must be loaded to preview")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                    Spacer()
 
-                                Button(action: { store.send(.readResourceTapped) }) {
-                                    HStack {
-                                        Image(systemName: "doc.text")
-                                        Text("Load Content")
+                                    Button("Clear") {
+                                        store.send(.dismissResult)
                                     }
+                                    .font(.caption)
                                 }
-                                .controlSize(.large)
+
+                                let content = ResourceContent(
+                                    text: extractTextContent(from: result.contents),
+                                    data: extractBinaryContent(from: result.contents)
+                                )
+                                ContentPreviewView(content: content, mimeType: displayMimeType)
                             }
-                            .frame(maxWidth: .infinity, minHeight: 200)
-                            .background(.fill.tertiary)
-                            .cornerRadius(8)
+                            .padding()
+                            #if os(visionOS)
+                                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 8))
+                            #else
+                                .background(.fill.quaternary)
+                                .cornerRadius(8)
+                            #endif
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -609,5 +625,3 @@ private struct InfoRow: View {
         }
     }
 }
-
-
