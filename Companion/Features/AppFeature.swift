@@ -200,6 +200,8 @@ struct AppFeature {
                 return .run { send in
                     await serverClient.addServer(exampleServer)
                     print("AppFeature: Example server added, now auto-connecting...")
+                    // Wait a brief moment for the server to be processed and state updated
+                    try? await Task.sleep(for: .milliseconds(100))
                     await send(.serverDetail(id: exampleServer.id, action: .connect))
                 }
 
