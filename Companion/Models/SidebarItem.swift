@@ -64,11 +64,13 @@ enum SidebarItem: Hashable, Identifiable, Equatable {
             if !server.availablePrompts.isEmpty {
                 items.append(.prompts(serverId: server.id, prompts: server.availablePrompts))
             }
-            if !server.availableResources.isEmpty {
+            if !server.availableResources.isEmpty || !server.availableResourceTemplates.isEmpty  {
                 items.append(
                     .resources(
-                        serverId: server.id, resources: server.availableResources,
-                        templates: server.resourceTemplates))
+                        serverId: server.id,
+                        resources: server.availableResources,
+                        templates: server.availableResourceTemplates
+                    ))
             }
             if !server.availableTools.isEmpty {
                 items.append(.tools(serverId: server.id, tools: server.availableTools))

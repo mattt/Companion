@@ -339,7 +339,7 @@ extension DependencyValues {
         updatedServer.availableTools = connectionData.tools
         updatedServer.availablePrompts = connectionData.prompts
         updatedServer.availableResources = connectionData.resources
-        updatedServer.resourceTemplates = connectionData.resourceTemplates
+        updatedServer.availableResourceTemplates = connectionData.resourceTemplates
         updatedServer.serverInfo = connectionData.initResult.serverInfo
         updatedServer.protocolVersion = connectionData.initResult.protocolVersion
         updatedServer.capabilities = connectionData.initResult.capabilities
@@ -613,7 +613,7 @@ extension DependencyValues {
             updatedServer.availableTools = []
             updatedServer.availablePrompts = []
             updatedServer.availableResources = []
-            updatedServer.resourceTemplates = []
+            updatedServer.availableResourceTemplates = []
             servers[id: serverId] = updatedServer
             notifyServersChanged()
         }
@@ -913,7 +913,7 @@ extension DependencyValues {
 
         // Update server in the list
         if servers[id: serverId] != nil {
-            servers[id: serverId]?.resourceTemplates = mcpResourceTemplates
+            servers[id: serverId]?.availableResourceTemplates = mcpResourceTemplates
             notifyServersChanged()
         }
 

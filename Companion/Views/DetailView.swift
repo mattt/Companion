@@ -28,7 +28,7 @@ struct DetailView: View {
                         case .resources:
                             if let resource = server.availableResources.first(where: { $0.uri == itemId }) {
                                 ResourceDetailView(resource: resource, serverId: serverId)
-                            } else if let template = server.resourceTemplates.first(where: {
+                            } else if let template = server.availableResourceTemplates.first(where: {
                                 $0.uriTemplate == itemId
                             }) {
                                 ResourceDetailView(template: template, serverId: serverId)
@@ -56,7 +56,7 @@ struct DetailView: View {
                         case .resources:
                             ResourceListView(
                                 resources: server.availableResources,
-                                templates: server.resourceTemplates,
+                                templates: server.availableResourceTemplates,
                                 serverId: serverId,
                                 columnVisibility: columnVisibility)
                         case .tools:

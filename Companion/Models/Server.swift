@@ -101,7 +101,7 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
     var availableTools: [MCP.Tool] = []
     var availablePrompts: [MCP.Prompt] = []
     var availableResources: [MCP.Resource] = []
-    var resourceTemplates: [MCP.Resource.Template] = []
+    var availableResourceTemplates: [MCP.Resource.Template] = []
 
     // Server information from MCP initialization
     var serverInfo: MCP.Server.Info?
