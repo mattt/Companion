@@ -55,7 +55,7 @@ private func withThrowingTimeout<T>(seconds: Int, operation: @escaping () async 
 
 struct ServerClient {
     var connect: @Sendable (Server) async throws -> Void
-    var disconnect: @Sendable (String) async throws -> Void
+    var disconnect: @Sendable (String, Bool) async throws -> Void
     var testConnection: @Sendable (Server) async throws -> Void
     var fetchTools: @Sendable (String) async throws -> [Tool]
     var fetchPrompts: @Sendable (String) async throws -> [Prompt]
@@ -83,8 +83,8 @@ extension ServerClient: DependencyKey {
                 try await clientManager.connect(server)
             },
 
-            disconnect: { serverId in
-                try await clientManager.disconnect(serverId)
+            disconnect: { serverId, notify in
+                try await clientManager.disconnect(serverId, notify: notify)
             },
 
             testConnection: { server in
@@ -151,8 +151,8 @@ extension ServerClient: DependencyKey {
             try await Task.sleep(for: .seconds(1))
             print("TEST: Connected to server \(server.name)")
         },
-        disconnect: { serverId in
-            print("TEST: Disconnecting server \(serverId)")
+        disconnect: { serverId, notify in
+            print("TEST: Disconnecting server \(serverId), notify: \(notify)")
         },
         testConnection: { server in
             print("TEST: Testing connection to server \(server.name)")
@@ -403,19 +403,21 @@ extension DependencyValues {
                     "\(homePath)/.asdf/shims",
                     "\(homePath)/.pyenv/shims",
                     "\(homePath)/.rbenv/shims",
-                    "\(homePath)/.bun/bin"
+                    "\(homePath)/.bun/bin",
                 ].joined(separator: ":")
 
                 // Apply any custom environment variables from server config
                 if case .stdio(let stdioConfig) = server.configuration,
-                   let customEnv = stdioConfig.env {
+                    let customEnv = stdioConfig.env
+                {
                     for (key, value) in customEnv {
                         env[key] = value
                     }
                 }
 
                 // Use shell wrapper to properly resolve PATH
-                let shellCommand = args.isEmpty ? command : "\(command) \(args.joined(separator: " "))"
+                let shellCommand =
+                    args.isEmpty ? command : "\(command) \(args.joined(separator: " "))"
 
                 print("ServerClient: Setting up STDIO transport")
                 print("ServerClient: Shell command: \(shellCommand)")
@@ -428,7 +430,8 @@ extension DependencyValues {
                 process.executableURL = URL(fileURLWithPath: "/bin/sh")
                 process.arguments = ["-c", shellCommand]
                 process.environment = env
-                process.currentDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                process.currentDirectoryURL = URL(
+                    fileURLWithPath: FileManager.default.currentDirectoryPath)
                 process.standardInput = stdInPipe
                 process.standardOutput = stdOutPipe
                 process.standardError = Pipe()
@@ -583,11 +586,11 @@ extension DependencyValues {
         }
     }
 
-    func disconnect(_ serverId: String) async throws {
+    func disconnect(_ serverId: String, notify: Bool = true) async throws {
         print("ServerClient: Disconnecting server \(serverId)")
 
         // Update server status to disconnected before actual disconnection
-        if let server = servers[id: serverId] {
+        if notify, let server = servers[id: serverId] {
             var updatedServer = server
             updatedServer.status = .disconnected
             servers[id: serverId] = updatedServer
@@ -604,7 +607,7 @@ extension DependencyValues {
         connections.removeValue(forKey: serverId)
 
         // Update server status and clear runtime data
-        if let server = servers[id: serverId] {
+        if notify, let server = servers[id: serverId] {
             var updatedServer = server
             updatedServer.status = .disconnected
             updatedServer.availableTools = []
@@ -953,13 +956,13 @@ extension DependencyValues {
     }
 
     func removeServer(_ serverId: String) async {
-        // Disconnect if connected
-        try? await disconnect(serverId)
+        // Disconnect if connected but skip notification to avoid flash
+        try? await disconnect(serverId, notify: false)
 
         // Remove from servers list
         servers.removeAll { $0.id == serverId }
 
-        // Save to persistent storage
+        // Save to persistent storage and notify once
         saveServerConfigs()
         notifyServersChanged()
     }

@@ -91,7 +91,7 @@ struct ServerDetailFeature {
                 state.error = nil
                 return .run { [id = state.server.id] send in
                     do {
-                        try await serverClient.disconnect(id)
+                        try await serverClient.disconnect(id, true)
                     } catch {
                         await send(.connectionFailed(error.localizedDescription))
                     }
