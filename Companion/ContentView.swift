@@ -11,20 +11,23 @@ struct ContentView: View {
         guard let selection = selection,
             let server = server,
             selection.section == nil,  // Only for server selection, not sections
-            let serverDetailState = store.serverDetails[id: server.id]
+            let serverDetailState = store.serverDetails?[id: server.id]
         else {
             return nil
         }
 
         return store.scope(
-            state: { appState in appState.serverDetails[id: server.id] ?? serverDetailState },
+            state: { appState in appState.serverDetails?[id: server.id] ?? serverDetailState },
             action: { .serverDetail(id: server.id, action: $0) }
         )
     }
 
     var body: some View {
         Group {
-            if store.servers.isEmpty {
+            if store.serverDetails == nil {
+                ProgressView("Loading servers...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if store.servers.isEmpty {
                 WelcomeView(onAddServer: {
                     store.send(.presentAddServer)
                 }, onAddExampleServer: {

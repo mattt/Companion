@@ -7,23 +7,23 @@ import enum MCP.Value
 struct AppFeature {
     @ObservableState
     struct State: Equatable {
-        var serverDetails: IdentifiedArrayOf<ServerDetailFeature.State> = []
+        var serverDetails: IdentifiedArrayOf<ServerDetailFeature.State>?
         var selection: SidebarSelection?
-        var isLoading = false
         var error: String?
         @Presents var editServer: EditServerFeature.State?
         @Presents var addServer: AddServerFeature.State?
 
         init() {
-            // Initialize with empty servers - will be loaded from ServerClient
+            // Initialize with nil - will be loaded from ServerClient
         }
 
         var servers: IdentifiedArrayOf<Server> {
-            IdentifiedArrayOf(uniqueElements: serverDetails.map { $0.server })
+            guard let serverDetails else { return [] }
+            return IdentifiedArrayOf(uniqueElements: serverDetails.map { $0.server })
         }
 
         func serverDetail(_ serverId: String) -> ServerDetailFeature.State? {
-            serverDetails[id: serverId]
+            serverDetails?[id: serverId]
         }
     }
 
@@ -33,7 +33,6 @@ struct AppFeature {
         case selectionChanged(SidebarSelection?)
 
         case removeServer(id: String)
-        case loadingChanged(Bool)
         case errorOccurred(String?)
         case presentAddServer
         case addExampleServer
@@ -74,7 +73,7 @@ struct AppFeature {
                 // Update or create ServerDetailFeature.State for each server
                 var newServerDetails: IdentifiedArrayOf<ServerDetailFeature.State> = []
                 for server in servers {
-                    if let existingDetail = state.serverDetails[id: server.id] {
+                    if let existingDetail = state.serverDetails?[id: server.id] {
                         // Update existing server detail with new server data
                         var updatedDetail = existingDetail
                         updatedDetail.server = server
@@ -133,14 +132,10 @@ struct AppFeature {
                     state.selection = nil
                 }
                 // Remove from server details
-                state.serverDetails.remove(id: id)
+                state.serverDetails?.remove(id: id)
                 return .run { _ in
                     await serverClient.removeServer(id)
                 }
-
-            case let .loadingChanged(isLoading):
-                state.isLoading = isLoading
-                return .none
 
             case let .errorOccurred(error):
                 state.error = error
@@ -155,7 +150,7 @@ struct AppFeature {
                     return .none
                 }
                 let serverId = editServerState.server.id
-                guard state.serverDetails[id: serverId] != nil else {
+                guard state.serverDetails?[id: serverId] != nil else {
                     print("AppFeature: Server \(serverId) not found for update")
                     return .none
                 }
@@ -239,18 +234,18 @@ struct AppFeature {
                 // Handle special actions that require AppFeature coordination
                 switch action {
                 case .edit:
-                    guard let serverDetail = state.serverDetails[id: id] else { return .none }
+                    guard let serverDetail = state.serverDetails?[id: id] else { return .none }
                     return .send(.presentEditServer(serverDetail.server))
                 default:
                     // Handle the action in the focused ServerDetailFeature
-                    guard var serverDetail = state.serverDetails[id: id] else { return .none }
+                    guard var serverDetail = state.serverDetails?[id: id] else { return .none }
 
                     // Create a mini-store to run the ServerDetailFeature reducer
                     let serverFeature = ServerDetailFeature()
                     let effect = serverFeature.reduce(into: &serverDetail, action: action)
 
                     // Update the state with the modified server detail
-                    state.serverDetails[id: id] = serverDetail
+                    state.serverDetails?[id: id] = serverDetail
 
                     // Map any effects to include the server ID
                     return effect.map { .serverDetail(id: id, action: $0) }
