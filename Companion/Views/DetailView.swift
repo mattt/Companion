@@ -81,3 +81,25 @@ struct DetailView: View {
         }
     }
 }
+
+private struct EmptyStateView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 64))
+                .foregroundColor(.secondary)
+
+            Text("Select an item")
+                .font(.title2)
+                .fontWeight(.medium)
+
+            Text("Choose a server, prompt, resource, or tool from the sidebar to view its details")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 300)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
+    }
+}
