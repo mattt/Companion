@@ -197,6 +197,7 @@ struct AppFeature {
                     print("AppFeature: Example server added, now auto-connecting...")
                     // Wait a brief moment for the server to be processed and state updated
                     try? await Task.sleep(for: .milliseconds(100))
+                    await send(.selectionChanged(.server(exampleServer)))
                     await send(.serverDetail(id: exampleServer.id, action: .connect))
                 }
 
@@ -212,6 +213,7 @@ struct AppFeature {
                     print(
                         "AppFeature: Server '\(name)' added to ServerClient, now auto-connecting..."
                     )
+                    await send(.selectionChanged(.server(newServer)))
                     await send(.serverDetail(id: newServer.id, action: .connect))
                 }
 
