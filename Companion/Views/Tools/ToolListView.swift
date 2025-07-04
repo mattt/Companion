@@ -105,14 +105,15 @@ struct ToolListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    #if os(macOS)
+                    if !tools.isEmpty {
+                        #if os(macOS)
 //                        if #available(macOS 26.0, *) {
 //                            ToolbarItemGroup(placement: .navigation) {
 //                                FilterToolbar(
 //                                    searchText: $searchText,
 //                                    placeholder: "Filter tools",
 //                                    width: leftPaneWidth,
-//                                    isVisible: columnVisibility == .all && !tools.isEmpty
+//                                    isVisible: columnVisibility == .all
 //                                )
 //                            }
 //                            .sharedBackgroundVisibility(Visibility.hidden)
@@ -122,11 +123,12 @@ struct ToolListView: View {
                                     searchText: $searchText,
                                     placeholder: "Filter tools",
                                     width: leftPaneWidth,
-                                    isVisible: columnVisibility == .all && !tools.isEmpty
+                                    isVisible: columnVisibility == .all
                                 )
                             }
 //                        }
-                    #endif
+                        #endif
+                    }
                 }
             #else
                 NavigationStack {

@@ -61,10 +61,10 @@ enum SidebarItem: Hashable, Identifiable, Equatable {
             guard server.status == .connected else { return nil }
             
             var items: [SidebarItem] = []
-            if !server.availablePrompts.isEmpty {
+            if server.capabilities?.prompts != nil {
                 items.append(.prompts(serverId: server.id, prompts: server.availablePrompts))
             }
-            if !server.availableResources.isEmpty || !server.availableResourceTemplates.isEmpty  {
+            if server.capabilities?.resources != nil {
                 items.append(
                     .resources(
                         serverId: server.id,
@@ -72,7 +72,7 @@ enum SidebarItem: Hashable, Identifiable, Equatable {
                         templates: server.availableResourceTemplates
                     ))
             }
-            if !server.availableTools.isEmpty {
+            if server.capabilities?.tools != nil {
                 items.append(.tools(serverId: server.id, tools: server.availableTools))
             }
             return items.isEmpty ? nil : items
