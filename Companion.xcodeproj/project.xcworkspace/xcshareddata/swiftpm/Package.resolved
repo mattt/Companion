@@ -1,5 +1,5 @@
 {
-  "originHash" : "ba596bb25f9e85490ef8dfb3a4ab9901b019d93ac920fba68c4837904d4b0391",
+  "originHash" : "53192a12df69b6d07eea2ce0a462c9a2bc5b2b5ea20f95abe744662dad388b7a",
   "pins" : [
     {
       "identity" : "combine-schedulers",
@@ -161,6 +161,15 @@
       "state" : {
         "revision" : "61e4ca4b81b9e09e2ec863b00c340eb13497dac6",
         "version" : "1.5.0"
+      }
+    },
+    {
+      "identity" : "uritemplate",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/loopwork/URITemplate",
+      "state" : {
+        "revision" : "8e2101f43a31584ccac08b359c3c5f985904c7a0",
+        "version" : "1.1.0"
       }
     },
     {

@@ -13,6 +13,7 @@
 		F82EF4F52DFDB069006F10F1 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = F82EF4F42DFDB069006F10F1 /* MCP */; };
 		F8AF14642DF845B500B83292 /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = F8AF14632DF845B500B83292 /* ComposableArchitecture */; };
 		F8AF14792DF8564400B83292 /* SystemPackage in Frameworks */ = {isa = PBXBuildFile; productRef = F8AF14782DF8564400B83292 /* SystemPackage */; };
+		F8BE15542E18215E00D1708C /* URITemplate in Frameworks */ = {isa = PBXBuildFile; productRef = F8BE15532E18215E00D1708C /* URITemplate */; };
 		F8F5525D2DEE410E009E6EF9 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = F8F5525C2DEE410E009E6EF9 /* MCP */; };
 /* End PBXBuildFile section */
 
@@ -69,6 +70,7 @@
 				F8AF14642DF845B500B83292 /* ComposableArchitecture in Frameworks */,
 				F82EF4F52DFDB069006F10F1 /* MCP in Frameworks */,
 				F82EF4F22DFDAC70006F10F1 /* JSONSchema in Frameworks */,
+				F8BE15542E18215E00D1708C /* URITemplate in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,6 +138,7 @@
 				F82EF4922DFC86CC006F10F1 /* JSONSchema */,
 				F82EF4F12DFDAC70006F10F1 /* JSONSchema */,
 				F82EF4F42DFDB069006F10F1 /* MCP */,
+				F8BE15532E18215E00D1708C /* URITemplate */,
 			);
 			productName = Companion;
 			productReference = F81DA9A02DEAC58400DE9718 /* Companion.app */;
@@ -224,6 +227,7 @@
 				F8AF14772DF8564400B83292 /* XCRemoteSwiftPackageReference "swift-system" */,
 				F82EF4F02DFDAC70006F10F1 /* XCRemoteSwiftPackageReference "JSONSchema" */,
 				F82EF4F32DFDB069006F10F1 /* XCRemoteSwiftPackageReference "swift-sdk" */,
+				F8BE15522E18215E00D1708C /* XCRemoteSwiftPackageReference "URITemplate" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F81DA9A12DEAC58400DE9718 /* Products */;
@@ -703,6 +707,14 @@
 				minimumVersion = 1.5.0;
 			};
 		};
+		F8BE15522E18215E00D1708C /* XCRemoteSwiftPackageReference "URITemplate" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/loopwork/URITemplate";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -733,6 +745,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F8AF14772DF8564400B83292 /* XCRemoteSwiftPackageReference "swift-system" */;
 			productName = SystemPackage;
+		};
+		F8BE15532E18215E00D1708C /* URITemplate */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F8BE15522E18215E00D1708C /* XCRemoteSwiftPackageReference "URITemplate" */;
+			productName = URITemplate;
 		};
 		F8F5525C2DEE410E009E6EF9 /* MCP */ = {
 			isa = XCSwiftPackageProductDependency;

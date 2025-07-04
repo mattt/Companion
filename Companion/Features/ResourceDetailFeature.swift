@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import Foundation
 import MCP
+import URITemplate
 
 @Reducer
 struct ResourceDetailFeature {
@@ -80,11 +81,15 @@ struct ResourceDetailFeature {
                     return .send(.resourceReadFailed("No template available"))
                 }
 
-                // Substitute template arguments into URI template
-                let resourceUri = substituteTemplateArguments(
-                    template: template.uriTemplate,
-                    arguments: state.templateArguments
-                )
+                // Expand URI template with arguments
+                let resourceUri: String
+                do {
+                    let uriTemplate = try URITemplate(template.uriTemplate)
+                    let variables = state.templateArguments.mapValues { VariableValue.string($0) }
+                    resourceUri = uriTemplate.expand(with: variables)
+                } catch {
+                    return .send(.resourceReadFailed("Invalid URI template: \(error.localizedDescription)"))
+                }
 
                 state.isReadingResource = true
                 state.resourceReadResult = nil
@@ -128,12 +133,5 @@ struct ResourceDetailFeature {
         }
     }
 
-    // Helper function to substitute template arguments
-    private func substituteTemplateArguments(template: String, arguments: [String: String]) -> String {
-        var result = template
-        for (key, value) in arguments {
-            result = result.replacingOccurrences(of: "{\(key)}", with: value)
-        }
-        return result
-    }
+
 }
