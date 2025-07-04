@@ -1,6 +1,7 @@
 import ComposableArchitecture
 import MCP
 import SwiftUI
+import URITemplate
 
 struct ResourceTemplateView: View {
     let store: StoreOf<ResourceDetailFeature>
@@ -49,10 +50,15 @@ struct ResourceTemplateView: View {
                                 .font(.caption)
                                 .fontWeight(.medium)
 
-                            let resolvedUri = substituteTemplateArguments(
-                                template: template.uriTemplate,
-                                arguments: store.templateArguments
-                            )
+                            let resolvedUri: String = {
+                                do {
+                                    let uriTemplate = try URITemplate(template.uriTemplate)
+                                    let variables = store.templateArguments.mapValues { VariableValue.string($0) }
+                                    return uriTemplate.expand(with: variables)
+                                } catch {
+                                    return "Invalid template: \(error.localizedDescription)"
+                                }
+                            }()
 
                             Text(resolvedUri)
                                 .font(.system(.caption, design: .monospaced))
@@ -159,27 +165,8 @@ struct ResourceTemplateView: View {
     }
 
     private func extractTemplateParameters(from template: String) -> [String] {
-        let pattern = #"\{([^}]+)\}"#
-        let regex = try! NSRegularExpression(pattern: pattern)
-        let range = NSRange(template.startIndex..<template.endIndex, in: template)
-        let matches = regex.matches(in: template, range: range)
-
-        return matches.compactMap { match in
-            if let range = Range(match.range(at: 1), in: template) {
-                return String(template[range])
-            }
-            return nil
-        }
-    }
-
-    private func substituteTemplateArguments(template: String, arguments: [String: String])
-        -> String
-    {
-        var result = template
-        for (key, value) in arguments {
-            result = result.replacingOccurrences(of: "{\(key)}", with: value)
-        }
-        return result
+        let uriTemplate = try? URITemplate(template)
+        return uriTemplate?.variables ?? []
     }
 
     private func extractTextContent(from contents: [Resource.Content]) -> String? {
