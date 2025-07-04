@@ -185,11 +185,16 @@ struct ToolCallView: View {
                         )
                     )
                     .labelsHidden()
-                    
-                case .number(_, _, _, _, _, _, let minimum, let maximum, _, _, _):
+
+                case .number(_, _, _, _, _, _, let minimum, let maximum, let exclusiveMinimum, let exclusiveMaximum, let multipleOf):
                     VStack(alignment: .leading, spacing: 8) {
-                        if let min = minimum, let max = maximum, max - min <= 1000 {
-                            // Show slider for bounded ranges
+                        // Show slider only when bounds are defined AND multipleOf is specified
+                        let hasBounds = (minimum != nil && maximum != nil) || (exclusiveMinimum != nil && exclusiveMaximum != nil)
+                        let minValue = minimum ?? exclusiveMinimum
+                        let maxValue = maximum ?? exclusiveMaximum
+
+                        if hasBounds, let min = minValue, let max = maxValue, let step = multipleOf, max - min <= 1000 {
+                            // Show slider for bounded ranges with defined step
                             HStack {
                                 Slider(
                                     value: Binding(
@@ -198,7 +203,8 @@ struct ToolCallView: View {
                                         },
                                         set: { store.send(.updateFormInput(key, String($0))) }
                                     ),
-                                    in: min...max
+                                    in: min...max,
+                                    step: step
                                 )
                                 Text(store.formInputs[key] ?? String(min))
                                     .font(.caption)
@@ -206,7 +212,7 @@ struct ToolCallView: View {
                                     .frame(minWidth: 40)
                             }
                         }
-                        
+
                         // Always provide text field option
                         TextField(
                             "Enter number",
@@ -220,9 +226,14 @@ struct ToolCallView: View {
                         .keyboardType(.decimalPad)
 #endif
                     }
-                    
-                case .integer(_, _, _, _, _, _, let minimum, let maximum, _, _, _):
-                    if let min = minimum, let max = maximum, max - min <= 1000 {
+
+                case .integer(_, _, _, _, _, _, let minimum, let maximum, let exclusiveMinimum, let exclusiveMaximum, let multipleOf):
+                    // Show stepper only when bounds are defined AND multipleOf is specified
+                    let hasBounds = (minimum != nil && maximum != nil) || (exclusiveMinimum != nil && exclusiveMaximum != nil)
+                    let minValue = minimum ?? exclusiveMinimum
+                    let maxValue = maximum ?? exclusiveMaximum
+
+                    if hasBounds, let min = minValue, let max = maxValue, multipleOf != nil, max - min <= 1000 {
                         // Show stepper with text field for bounded integer ranges
                         HStack {
                             TextField(
@@ -236,7 +247,7 @@ struct ToolCallView: View {
 #if os(iOS)
                             .keyboardType(.numberPad)
 #endif
-                            
+
                             Stepper(
                                 value: Binding(
                                     get: { Int(store.formInputs[key] ?? String(min)) ?? min },
