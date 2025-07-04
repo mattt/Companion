@@ -173,7 +173,8 @@ struct ResourceListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    #if os(macOS)
+                    if !(resources.isEmpty && templates.isEmpty) {
+                        #if os(macOS)
 //                        if #available(macOS 26.0, *) {
 //                            ToolbarItemGroup(placement: .navigation) {
 //                                FilterToolbar(
@@ -181,7 +182,6 @@ struct ResourceListView: View {
 //                                    placeholder: "Filter resources",
 //                                    width: leftPaneWidth,
 //                                    isVisible: columnVisibility == .all
-//                                        && !(resources.isEmpty && templates.isEmpty)
 //                                )
 //                            }
 //                            .sharedBackgroundVisibility(Visibility.hidden)
@@ -192,11 +192,11 @@ struct ResourceListView: View {
                                     placeholder: "Filter resources",
                                     width: leftPaneWidth,
                                     isVisible: columnVisibility == .all
-                                        && !(resources.isEmpty && templates.isEmpty)
                                 )
                             }
 //                        }
-                    #endif
+                        #endif
+                    }
                 }
             #else
                 NavigationStack {

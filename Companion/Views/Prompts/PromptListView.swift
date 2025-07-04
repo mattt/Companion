@@ -99,7 +99,8 @@ struct PromptListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    #if os(macOS)
+                    if !prompts.isEmpty {
+                        #if os(macOS)
 //                        if #available(macOS 26.0, *) {
 //                            ToolbarItemGroup(placement: .navigation) {
 //                                FilterToolbar(
@@ -116,11 +117,12 @@ struct PromptListView: View {
                                     searchText: $searchText,
                                     placeholder: "Filter prompts",
                                     width: leftPaneWidth,
-                                    isVisible: columnVisibility == .all && !prompts.isEmpty
+                                    isVisible: columnVisibility == .all
                                 )
                             }
 //                        }
-                    #endif
+                        #endif
+                    }
                 }
             #else
                 NavigationStack {
