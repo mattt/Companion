@@ -1,6 +1,6 @@
 # Companion
 
-<img align="right" width="128" src="/Companion/Assets.xcassets/AppIcon.appiconset/Icon-macOS-512x512@2x.png" alt="Screenshot of iMCP on first launch" />
+<img align="right" width="128" src="/Companion/Assets.xcassets/AppIcon.appiconset/Icon-macOS-512x512@2x.png" alt="Companion app icon" />
 
 **Companion** is a utility for testing and debugging your MCP servers
 on macOS, iOS, and visionOS.
