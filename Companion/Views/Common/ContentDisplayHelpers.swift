@@ -1,5 +1,5 @@
-import SwiftUI
 import AVFoundation
+import SwiftUI
 
 // MARK: - Shared Content Display Views
 
@@ -23,7 +23,9 @@ struct ContentDisplayHelpers {
     }
 
     @ViewBuilder
-    static func imageContentView(data: String, mimeType: String, metadata: [String: String]?) -> some View {
+    static func imageContentView(data: String, mimeType: String, metadata: [String: String]?)
+        -> some View
+    {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label("Image", systemImage: "photo")
@@ -135,17 +137,22 @@ struct ContentDisplayHelpers {
 
     @ViewBuilder
     private static func audioDecodeErrorView() -> some View {
-        Text("Failed to decode audio data")
-            .font(.caption)
-            .foregroundColor(.red)
-            .padding()
-            .frame(maxWidth: .infinity)
-            #if os(visionOS)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
-            #else
-                .background(.fill.tertiary)
-                .cornerRadius(8)
-            #endif
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+                .font(.title2)
+            Text("Unable to decode audio data")
+                .font(.caption)
+                .foregroundColor(.red)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        #if os(visionOS)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        #else
+            .background(.fill.tertiary)
+            .cornerRadius(8)
+        #endif
     }
 
     @ViewBuilder
@@ -211,6 +218,13 @@ private struct AudioPlayerView: View {
                 }
                 .disabled(!player.isReady)
 
+                if let errorMessage = player.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.leading)
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(formatTime(player.currentTime))
@@ -265,11 +279,17 @@ private class AudioPlayer: NSObject, ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var progress: Double = 0
+    @Published var errorMessage: String?
 
     private var audioPlayer: AVAudioPlayer?
     private var timer: Timer?
 
+    private static let progressUpdateInterval: TimeInterval = 0.1
+
     func setupAudio(from data: Data) {
+        // Clean up existing resources before setting up new ones
+        stop()
+
         do {
             audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer?.delegate = self
@@ -277,9 +297,12 @@ private class AudioPlayer: NSObject, ObservableObject {
 
             duration = audioPlayer?.duration ?? 0
             isReady = true
+            errorMessage = nil
 
             startTimer()
         } catch {
+            let errorDescription = error.localizedDescription
+            errorMessage = "Failed to load audio: \(errorDescription)"
             print("Audio setup failed: \(error)")
             isReady = false
         }
@@ -304,7 +327,7 @@ private class AudioPlayer: NSObject, ObservableObject {
     }
 
     private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+        timer = Timer.scheduledTimer(withTimeInterval: Self.progressUpdateInterval, repeats: true) { _ in
             guard let player = self.audioPlayer else { return }
             self.currentTime = player.currentTime
             self.progress = self.duration > 0 ? player.currentTime / self.duration : 0
