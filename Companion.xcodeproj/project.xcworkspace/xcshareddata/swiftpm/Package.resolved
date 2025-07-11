@@ -132,8 +132,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/modelcontextprotocol/swift-sdk",
       "state" : {
-        "branch" : "mattt/jsonschema",
-        "revision" : "a23b362331f376803eb4bf3a5a4f947c52c625ae"
+        "revision" : "106167bad12cd8d004b0cbfcec8211c5408794d8"
       }
     },
     {
