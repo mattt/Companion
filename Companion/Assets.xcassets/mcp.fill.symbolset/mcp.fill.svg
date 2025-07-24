@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg height="600" width="800" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg height="600" width="800" xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink">
     <g id="Notes" font-family="'LucidaGrande', 'Lucida Grande', sans-serif" font-size="13">
         <rect fill="white" height="600.0" width="800.0" x="0.0" y="0.0" />
         <g font-size="13">
@@ -11,9 +12,10 @@
             <text x="250.0" y="30.0">Ultralight</text>
             <text x="450.0" y="30.0">Regular</text>
             <text x="650.0" y="30.0">Black</text>
-            <text id="template-version" fill="#505050" text-anchor="end" x="785.0" y="575.0">Template v.3.0</text>
-            <a href="https://loop.work">
-                <text fill="#505050" text-anchor="end" x="785.0" y="590.0">Loopwork Limited</text>
+            <text id="template-version" fill="#505050" text-anchor="end" x="785.0" y="575.0">Template
+                v.3.0</text>
+            <a href="https://mat.tt">
+                <text fill="#505050" text-anchor="end" x="785.0" y="590.0">Mattt</text>
             </a>
         </g>
     </g>
