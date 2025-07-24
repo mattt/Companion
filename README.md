@@ -26,14 +26,14 @@ It's built using the
 
 ## Getting Started
 
-First, [download the Companion app](https://github.com/loopwork/Companion/releases/latest/download/Companion.zip)
+First, [download the Companion app](https://github.com/mattt/Companion/releases/latest/download/Companion.zip)
 (requires macOS 15 or later).
 
 Or, if you have [Homebrew](https://brew.sh) installed,
 you can run the following command:
 
 ```console
-brew install --cask loopwork/tap/Companion
+brew install --cask mattt/tap/Companion
 ```
 
 <img align="right" width="344" src="/Assets/companion-macos-add-server.png" alt="Screenshot of Companion on macOS showing Add server sheet" />
@@ -66,7 +66,10 @@ Or, select the parent item in the sidebar to get information about the server.
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0.
+This project is available under the MIT license.
+See the LICENSE file for more info.
+
+## Legal
 
 The app icon is a playful nod to [Finder](https://en.wikipedia.org/wiki/Finder_%28software%29) and
 [Henohenomoheji](https://en.wikipedia.org/wiki/Henohenomoheji) (へのへのもへじ),

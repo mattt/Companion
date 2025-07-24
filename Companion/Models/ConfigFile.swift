@@ -39,7 +39,7 @@ extension SharedKey where Self == FileStorageKey<ConfigFile> {
         fileStorage(
             .applicationSupportDirectory
                 .appending(
-                    component: Bundle.main.bundleIdentifier ?? "com.loopwork.Companion"
+                    component: Bundle.main.bundleIdentifier ?? "me.mattt.Companion"
                 ).appending(component: "servers.json")
         )
     }
