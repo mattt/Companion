@@ -1,4 +1,3 @@
-import ComposableArchitecture
 import Foundation
 
 struct ConfigFile {
@@ -13,35 +12,20 @@ struct ConfigFile {
     static let empty = ConfigFile(entries: [:])
 
     var servers: [Server] {
-        entries.map { (name, serverConfig) in
-            // Generate deterministic hash based on name and configuration
-            let stableId = "\(name)|\(serverConfig)".sha256Hash
-
-            return Companion.Server(id: stableId, name: name, configuration: serverConfig)
-        }
+        entries
+            .sorted { $0.key < $1.key }
+            .map { (name, serverConfig) in
+                let stableId = "\(name)|\(serverConfig)".sha256Hash
+                return Server(id: stableId, name: name, configuration: serverConfig)
+            }
     }
 
     init(servers: [Server]) {
         var serversDict: [String: Entry] = [:]
-
         for server in servers {
             serversDict[server.name] = server.configuration
         }
-
         self.entries = serversDict
-    }
-}
-
-// MARK: Shared
-
-extension SharedKey where Self == FileStorageKey<ConfigFile> {
-    static var serversConfig: Self {
-        fileStorage(
-            .applicationSupportDirectory
-                .appending(
-                    component: Bundle.main.bundleIdentifier ?? "me.mattt.Companion"
-                ).appending(component: "servers.json")
-        )
     }
 }
 
@@ -50,5 +34,47 @@ extension SharedKey where Self == FileStorageKey<ConfigFile> {
 extension ConfigFile: Codable {
     private enum CodingKeys: String, CodingKey {
         case entries = "mcpServers"
+    }
+}
+
+// MARK: - Persistence
+
+protocol ServerConfigStoring: Sendable {
+    func load() throws -> ConfigFile
+    func save(_ config: ConfigFile) throws
+}
+
+struct FileServerConfigStore: ServerConfigStoring {
+    let fileURL: URL
+
+    init(fileURL: URL = FileServerConfigStore.defaultFileURL) {
+        self.fileURL = fileURL
+    }
+
+    static var defaultFileURL: URL {
+        URL.applicationSupportDirectory
+            .appending(
+                component: Bundle.main.bundleIdentifier ?? "me.mattt.Companion"
+            )
+            .appending(component: "servers.json")
+    }
+
+    func load() throws -> ConfigFile {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return .empty
+        }
+        let data = try Data(contentsOf: fileURL)
+        return try JSONDecoder().decode(ConfigFile.self, from: data)
+    }
+
+    func save(_ config: ConfigFile) throws {
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(config)
+        try data.write(to: fileURL, options: [.atomic])
     }
 }
