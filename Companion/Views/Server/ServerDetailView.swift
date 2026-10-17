@@ -109,22 +109,13 @@ struct ServerDetailView: View {
             }
             .toolbar {
                 #if os(macOS)
-//                    if #available(macOS 26.0, *) {
-//                        ToolbarItemGroup(placement: .navigation) {
-//                            ServerInfoToolbarContent(server: server)
-//                                .padding(.horizontal, 8)
-//                        }
-//                        .sharedBackgroundVisibility(Visibility.hidden)
-//                    } else {
-                        ToolbarItemGroup(placement: .navigation) {
-                            ServerInfoToolbarContent(server: server)
-                            Spacer()
-                        }
-//                    }
-                #else
-                    ToolbarItemGroup(placement: .navigation) {
+                    ToolbarItem(id: "server-info", placement: .navigation) {
                         ServerInfoToolbarContent(server: server)
-                        Spacer()
+                    }
+                    .hiddenSharedBackgroundIfAvailable()
+                #else
+                    ToolbarItem(placement: .navigation) {
+                        ServerInfoToolbarContent(server: server)
                     }
                 #endif
 
@@ -167,22 +158,39 @@ private struct ServerInfoToolbarContent: View {
     let server: Server
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(server.name)
-                .font(.headline)
+                .font(.subheadline)
                 .fontWeight(.semibold)
                 .lineLimit(1)
 
             Text(server.configuration.displayValue)
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
                 .lineLimit(1)
                 .truncationMode(
                     server.configuration.displayValue.hasPrefix("http")
                         ? .tail : .middle)
         }
+        .padding(.horizontal, 6)
+        .frame(maxWidth: 420, alignment: .leading)
     }
 }
+
+#if os(macOS)
+    private extension CustomizableToolbarContent {
+        /// Hides the Liquid Glass toolbar background where the API exists,
+        /// so text content sits directly on the toolbar instead of in a pill.
+        @ToolbarContentBuilder
+        func hiddenSharedBackgroundIfAvailable() -> some CustomizableToolbarContent {
+            if #available(macOS 26.0, *) {
+                sharedBackgroundVisibility(.hidden)
+            } else {
+                self
+            }
+        }
+    }
+#endif
 
 private struct ServerConnectionStatus: View {
     let isConnected: Bool
@@ -262,8 +270,6 @@ private struct ServerActionMenu: View {
         } label: {
             Image(systemName: "ellipsis.circle")
         }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
     }
 }
 

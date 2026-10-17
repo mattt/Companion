@@ -27,9 +27,6 @@ struct ContentView: View {
                         server: server,
                         columnVisibility: columnVisibility
                     )
-                    #if os(macOS)
-                        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
-                    #endif
                 }
                 .navigationSplitViewStyle(.balanced)
             }
