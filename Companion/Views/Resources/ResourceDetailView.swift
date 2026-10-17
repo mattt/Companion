@@ -1,46 +1,50 @@
-import ComposableArchitecture
 import MCP
+import os
 import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ResourceDetailView: View {
-    let store: StoreOf<ResourceDetailFeature>
+    let resource: Resource?
+    let template: Resource.Template?
+    let serverId: String
+
+    @Environment(ServerStore.self) private var serverStore
+    @State private var isReadingResource = false
+    @State private var resourceReadResult: MCP.ReadResource.Result?
+    @State private var errorMessage: String?
+    @State private var readTask: Task<Void, Never>?
 
     init(resource: Resource, serverId: String) {
-        self.store = Store(
-            initialState: ResourceDetailFeature.State(resource: resource, serverId: serverId)
-        ) {
-            ResourceDetailFeature()
-        }
+        self.resource = resource
+        self.template = nil
+        self.serverId = serverId
     }
 
     init(template: Resource.Template, serverId: String) {
-        self.store = Store(
-            initialState: ResourceDetailFeature.State(template: template, serverId: serverId)
-        ) {
-            ResourceDetailFeature()
-        }
+        self.resource = nil
+        self.template = template
+        self.serverId = serverId
     }
 
     private var isTemplate: Bool {
-        store.isTemplate
+        template != nil
     }
 
     private var displayName: String {
-        store.resource?.name ?? store.template?.name ?? ""
+        resource?.name ?? template?.name ?? ""
     }
 
     private var displayURI: String {
-        store.resource?.uri ?? store.template?.uriTemplate ?? ""
+        resource?.uri ?? template?.uriTemplate ?? ""
     }
 
     private var displayMimeType: String? {
-        store.resource?.mimeType ?? store.template?.mimeType
+        resource?.mimeType ?? template?.mimeType
     }
 
     private var displayDescription: String? {
-        store.resource?.description ?? store.template?.description
+        resource?.description ?? template?.description
     }
 
     private var resourceIcon: String {
@@ -86,7 +90,7 @@ struct ResourceDetailView: View {
                         .cornerRadius(12)
                         .draggable(
                             ResourceDragItem(
-                                resource: store.resource, template: store.template, content: nil)
+                                resource: resource, template: template, content: nil)
                         ) {
                             Image(systemName: resourceIcon)
                                 .font(.system(size: 32))
@@ -170,24 +174,30 @@ struct ResourceDetailView: View {
                         Label("Read Resource", systemImage: "doc.text")
                             .font(.headline)
 
-                        if store.isReadingResource {
-                            Button(action: { store.send(.cancelResourceRead) }) {
+                        if isReadingResource {
+                            Button(action: { cancelResourceRead() }) {
                                 Label("Cancel", systemImage: "xmark.circle.fill")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
                         } else {
-                            Button(action: { store.send(.readResourceTapped) }) {
+                            Button(action: { readResource() }) {
                                 Text("Submit")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
-                            .disabled(store.serverId == nil)
                         }
 
-                        if store.isReadingResource {
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        if isReadingResource {
                             HStack {
                                 ProgressView()
                                     .scaleEffect(0.8)
@@ -197,7 +207,7 @@ struct ResourceDetailView: View {
                             .frame(maxWidth: .infinity, minHeight: 200)
                             .background(.fill.tertiary)
                             .cornerRadius(8)
-                        } else if let result = store.resourceReadResult {
+                        } else if let result = resourceReadResult {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Label(
@@ -210,7 +220,7 @@ struct ResourceDetailView: View {
                                     Spacer()
 
                                     Button("Clear") {
-                                        store.send(.dismissResult)
+                                        resourceReadResult = nil
                                     }
                                     .font(.caption)
                                 }
@@ -240,13 +250,49 @@ struct ResourceDetailView: View {
                     #endif
                 } else {
                     // Template form and preview section
-                    ResourceTemplateView(store: store)
+                    if let template {
+                        ResourceTemplateView(template: template, serverId: serverId)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
         .navigationTitle(displayName)
+    }
+
+
+    // MARK: - Actions
+
+    private func readResource() {
+        guard let resource else { return }
+
+        isReadingResource = true
+        resourceReadResult = nil
+        errorMessage = nil
+
+        let resourceUri = resource.uri
+
+        readTask = Task {
+            do {
+                let result = try await serverStore.readResource(
+                    serverID: serverId, uri: resourceUri)
+                guard !Task.isCancelled else { return }
+                resourceReadResult = result
+            } catch is CancellationError {
+                // Read was cancelled.
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            isReadingResource = false
+        }
+    }
+
+    private func cancelResourceRead() {
+        readTask?.cancel()
+        readTask = nil
+        isReadingResource = false
     }
 
     private func copyURI() {
@@ -592,7 +638,7 @@ private struct QuickLookPreviewView: View {
                 self.tempURL = fileURL
             }
         } catch {
-            print("Failed to create temp file: \(error)")
+            Logger.ui.error("Failed to create temp file: \(error.localizedDescription, privacy: .public)")
         }
     }
 

@@ -1,10 +1,17 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 import URITemplate
 
 struct ResourceTemplateView: View {
-    let store: StoreOf<ResourceDetailFeature>
+    let template: Resource.Template
+    let serverId: String?
+
+    @Environment(ServerStore.self) private var serverStore
+    @State private var isReadingResource = false
+    @State private var resourceReadResult: MCP.ReadResource.Result?
+    @State private var errorMessage: String?
+    @State private var templateArguments: [String: String] = [:]
+    @State private var readTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -15,7 +22,7 @@ struct ResourceTemplateView: View {
             templateArgumentsForm()
 
             // Preview section
-            if store.isReadingResource {
+            if isReadingResource {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -25,7 +32,7 @@ struct ResourceTemplateView: View {
                 .frame(maxWidth: .infinity, minHeight: 200)
                 .background(.fill.tertiary)
                 .cornerRadius(8)
-            } else if let result = store.resourceReadResult {
+            } else if let result = resourceReadResult {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Label(
@@ -38,14 +45,13 @@ struct ResourceTemplateView: View {
                         Spacer()
 
                         Button("Clear") {
-                            store.send(.dismissResult)
+                            resourceReadResult = nil
                         }
                         .font(.caption)
                     }
 
                     // Show resolved URI
-                    if let template = store.template {
-                        VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 4) {
                             Text("Resolved URI")
                                 .font(.caption)
                                 .fontWeight(.medium)
@@ -53,7 +59,7 @@ struct ResourceTemplateView: View {
                             let resolvedUri: String = {
                                 do {
                                     let uriTemplate = try URITemplate(template.uriTemplate)
-                                    let variables = store.templateArguments.mapValues { VariableValue.string($0) }
+                                    let variables = templateArguments.mapValues { VariableValue.string($0) }
                                     return uriTemplate.expand(with: variables)
                                 } catch {
                                     return "Invalid template: \(error.localizedDescription)"
@@ -68,7 +74,6 @@ struct ResourceTemplateView: View {
                                 .background(.fill.tertiary)
                                 .cornerRadius(6)
                                 .textSelection(.enabled)
-                        }
                     }
 
                     // Show content
@@ -76,7 +81,7 @@ struct ResourceTemplateView: View {
                         text: extractTextContent(from: result.contents),
                         data: extractBinaryContent(from: result.contents)
                     )
-                    ContentPreviewView(content: content, mimeType: store.template?.mimeType)
+                    ContentPreviewView(content: content, mimeType: template.mimeType)
                 }
                 .padding()
                 #if os(visionOS)
@@ -101,7 +106,7 @@ struct ResourceTemplateView: View {
     private func templateArgumentsForm() -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // Parse template parameters from URI template
-            let parameters = extractTemplateParameters(from: store.template?.uriTemplate ?? "")
+            let parameters = extractTemplateParameters(from: template.uriTemplate)
 
             if !parameters.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -118,8 +123,8 @@ struct ResourceTemplateView: View {
                             TextField(
                                 "Enter \(parameter)",
                                 text: Binding(
-                                    get: { store.templateArguments[parameter] ?? "" },
-                                    set: { store.send(.updateTemplateArgument(parameter, $0)) }
+                                    get: { templateArguments[parameter] ?? "" },
+                                    set: { templateArguments[parameter] = $0 }
                                 )
                             )
                             .textFieldStyle(.roundedBorder)
@@ -131,31 +136,83 @@ struct ResourceTemplateView: View {
                 .cornerRadius(8)
             }
 
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             // Submit button
-            if store.isReadingResource {
-                Button(action: { store.send(.cancelResourceRead) }) {
+            if isReadingResource {
+                Button(action: { cancelResourceRead() }) {
                     Label("Cancel", systemImage: "xmark.circle.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
             } else {
-                Button(action: { store.send(.readTemplateTapped) }) {
+                Button(action: { readTemplate() }) {
                     Text("Submit")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .disabled(store.serverId == nil || !allParametersHaveValues)
+                .disabled(serverId == nil || !allParametersHaveValues)
             }
         }
     }
 
+
+    // MARK: - Actions
+
+    private func readTemplate() {
+        guard let serverId else {
+            errorMessage = "No server ID provided"
+            return
+        }
+
+        let resourceUri: String
+        do {
+            let uriTemplate = try URITemplate(template.uriTemplate)
+            let variables = templateArguments.mapValues { VariableValue.string($0) }
+            resourceUri = uriTemplate.expand(with: variables)
+        } catch {
+            errorMessage = "Invalid URI template: \(error.localizedDescription)"
+            return
+        }
+
+        isReadingResource = true
+        resourceReadResult = nil
+        errorMessage = nil
+
+        readTask = Task {
+            do {
+                let result = try await serverStore.readResource(
+                    serverID: serverId, uri: resourceUri)
+                guard !Task.isCancelled else { return }
+                resourceReadResult = result
+            } catch is CancellationError {
+                // Read was cancelled.
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            isReadingResource = false
+        }
+    }
+
+    private func cancelResourceRead() {
+        readTask?.cancel()
+        readTask = nil
+        isReadingResource = false
+    }
+
     private var allParametersHaveValues: Bool {
-        let parameters = extractTemplateParameters(from: store.template?.uriTemplate ?? "")
+        let parameters = extractTemplateParameters(from: template.uriTemplate)
 
         for parameter in parameters {
-            let value = store.templateArguments[parameter] ?? ""
+            let value = templateArguments[parameter] ?? ""
             if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return false
             }

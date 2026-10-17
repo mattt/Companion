@@ -16,7 +16,7 @@ struct ToolListView: View {
         } else {
             return tools.filter { tool in
                 tool.name.localizedCaseInsensitiveContains(searchText)
-                    || tool.description.localizedCaseInsensitiveContains(searchText) == true
+                    || tool.description?.localizedCaseInsensitiveContains(searchText) == true
                     || tool.annotations.title?.localizedCaseInsensitiveContains(searchText)
                         == true
             }.sorted(by: { $0.name < $1.name })
@@ -101,6 +101,7 @@ struct ToolListView: View {
                             tool: selectedTool,
                             serverId: serverId
                         )
+                        .id(selectedTool.name)
                     } else if !filteredTools.isEmpty {
                         placeholderView
                     }
@@ -189,8 +190,8 @@ private struct ToolRowView: View {
                             .fontWeight(.medium)
                     }
 
-                    if !tool.description.isEmpty {
-                        Text(tool.description)
+                    if let description = tool.description, !description.isEmpty {
+                        Text(description)
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(2)

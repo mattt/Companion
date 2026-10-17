@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import SwiftUI
 
 // MARK: - Shared Content Display Views
@@ -303,7 +304,7 @@ private class AudioPlayer: NSObject, ObservableObject {
         } catch {
             let errorDescription = error.localizedDescription
             errorMessage = "Failed to load audio: \(errorDescription)"
-            print("Audio setup failed: \(error)")
+            Logger.ui.error("Audio setup failed: \(error.localizedDescription, privacy: .public)")
             isReady = false
         }
     }

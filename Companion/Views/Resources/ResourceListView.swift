@@ -166,8 +166,10 @@ struct ResourceListView: View {
                         switch selectedResource {
                         case .resource(let resource):
                             ResourceDetailView(resource: resource, serverId: serverId)
+                                .id(resource.uri)
                         case .template(let template):
                             ResourceDetailView(template: template, serverId: serverId)
+                                .id(template.uriTemplate)
                         }
                     } else if !filteredResources.isEmpty {
                         placeholderView

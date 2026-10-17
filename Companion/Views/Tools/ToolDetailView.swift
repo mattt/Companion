@@ -1,41 +1,42 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 
 struct ToolDetailView: View {
-    let store: StoreOf<ToolDetailFeature>
+    let tool: Tool
+    let serverId: String?
+
+    @State private var showingInputSchema = false
 
     init(tool: Tool, serverId: String? = nil) {
-        self.store = Store(initialState: ToolDetailFeature.State(tool: tool, serverId: serverId)) {
-            ToolDetailFeature()
-        }
+        self.tool = tool
+        self.serverId = serverId
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
-                    if let title = store.tool.annotations.title {
+                    if let title = tool.annotations.title {
                         Text(title)
                             .font(.title)
                             .fontWeight(.bold)
                             .textSelection(.enabled)
 
-                        Text(store.tool.name)
+                        Text(tool.name)
                             .font(.system(.title3, design: .monospaced))
                             .foregroundColor(.secondary)
                             .textSelection(.enabled)
                             .padding(.bottom, 8)
                     } else {
-                        Text(store.tool.name)
+                        Text(tool.name)
                             .font(.system(.title, design: .monospaced))
                             .fontWeight(.bold)
                             .textSelection(.enabled)
                     }
 
                     // Description (if available)
-                    if !store.tool.description.isEmpty {
-                        Text(store.tool.description)
+                    if let description = tool.description, !description.isEmpty {
+                        Text(description)
                             .font(.body)
                             .foregroundColor(.secondary)
                             .textSelection(.enabled)
@@ -43,25 +44,23 @@ struct ToolDetailView: View {
                 }
 
                 // Tool Hints
-                ToolHintsView(annotations: store.tool.annotations)
+                ToolHintsView(annotations: tool.annotations)
 
                 // Schema
                 ToolSchemaView(
-                    schema: store.tool.inputSchema,
-                    isExpanded: .init(
-                        get: { store.showingInputSchema },
-                        set: { _ in store.send(.toggleInputSchema) }
-                    )
+                    schema: tool.jsonSchema,
+                    isExpanded: $showingInputSchema
                 )
 
                 // Tool Calling
-                ToolCallView(store: store)
+                ToolCallView(tool: tool, serverId: serverId)
+                    .id("\(serverId ?? "")-\(tool.name)")
             }
             .frame(maxWidth: .infinity)
             .padding()
         }
         #if !os(macOS)
-            .navigationTitle(store.tool.annotations.title ?? store.tool.name)
+            .navigationTitle(tool.annotations.title ?? tool.name)
             .navigationBarTitleDisplayMode(.large)
         #endif
     }

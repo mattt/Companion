@@ -95,6 +95,7 @@ struct PromptListView: View {
 
                     if let selectedPrompt = selectedPrompt {
                         PromptDetailView(prompt: selectedPrompt, serverId: serverId)
+                            .id(selectedPrompt.name)
                     } else if !filteredPrompts.isEmpty {
                         placeholderView
                     }

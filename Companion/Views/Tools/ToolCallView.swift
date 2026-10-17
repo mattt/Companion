@@ -1,10 +1,18 @@
-import ComposableArchitecture
 import JSONSchema
+import MCP
 import SwiftUI
 
 struct ToolCallView: View {
-    let store: StoreOf<ToolDetailFeature>
-    
+    let tool: Tool
+    let serverId: String?
+
+    @Environment(ServerStore.self) private var serverStore
+    @State private var isCallingTool = false
+    @State private var toolCallResult: MCP.CallTool.Result?
+    @State private var errorMessage: String?
+    @State private var formInputs: [String: String] = [:]
+    @State private var callTask: Task<Void, Never>?
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -13,29 +21,29 @@ struct ToolCallView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Show form fields if tool has input schema
-                if let schema = store.tool.inputSchema {
+                if let schema = tool.jsonSchema {
                     formFieldsView(for: schema)
                 }
                 
-                if store.isCallingTool {
-                    Button(action: { store.send(.cancelToolCall) }) {
+                if isCallingTool {
+                    Button(action: { cancelToolCall() }) {
                         Label("Cancel", systemImage: "xmark.circle.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 } else {
-                    Button(action: { store.send(.callToolTapped) }) {
+                    Button(action: { callTool() }) {
                         Text("Submit")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
-                    .disabled(store.serverId == nil)
+                    .disabled(serverId == nil)
                 }
                 
                 // Show progress indicator when calling tool
-                if store.isCallingTool {
+                if isCallingTool {
                     HStack {
                         ProgressView()
                             .progressViewStyle(
@@ -56,7 +64,7 @@ struct ToolCallView: View {
                 }
                 
                 // Tool call result
-                else if let result = store.toolCallResult {
+                else if let result = toolCallResult {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Label(
@@ -71,7 +79,7 @@ struct ToolCallView: View {
                             Spacer()
                             
                             Button("Clear") {
-                                store.send(.dismissResult)
+                                toolCallResult = nil
                             }
                             .font(.caption)
                         }
@@ -81,17 +89,22 @@ struct ToolCallView: View {
                                 ForEach(Array(result.content.enumerated()), id: \.offset) {
                                     index, content in
                                     switch content {
-                                    case .text(let text):
+                                    case .text(let text, _, _):
                                         ContentDisplayHelpers.textContentView(text)
-                                    case .image(let data, let mimeType, let metadata):
+                                    case .image(let data, let mimeType, _, _):
                                         ContentDisplayHelpers.imageContentView(
-                                            data: data, mimeType: mimeType, metadata: metadata)
-                                    case .audio(let data, let mimeType):
+                                            data: data, mimeType: mimeType, metadata: nil)
+                                    case .audio(let data, let mimeType, _, _):
                                         ContentDisplayHelpers.audioContentView(
                                             data: data, mimeType: mimeType)
-                                    case .resource(let uri, let mimeType, let text):
+                                    case .resource(let resource, _, _):
                                         ContentDisplayHelpers.resourceContentView(
-                                            uri: uri, mimeType: mimeType, text: text)
+                                            uri: resource.uri,
+                                            mimeType: resource.mimeType ?? "",
+                                            text: resource.text)
+                                    case .resourceLink(let uri, let name, _, _, let mimeType, _):
+                                        ContentDisplayHelpers.resourceContentView(
+                                            uri: uri, mimeType: mimeType ?? "", text: name)
                                     }
                                 }
                             }
@@ -111,6 +124,16 @@ struct ToolCallView: View {
                     .background(.fill.quaternary)
                     .cornerRadius(8)
 #endif
+                }
+
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(.fill.quaternary)
+                        .cornerRadius(8)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -180,8 +203,8 @@ struct ToolCallView: View {
                     Toggle(
                         "",
                         isOn: Binding(
-                            get: { Bool(store.formInputs[key] ?? "false") ?? false },
-                            set: { store.send(.updateFormInput(key, String($0))) }
+                            get: { Bool(formInputs[key] ?? "false") ?? false },
+                            set: { formInputs[key] = String($0) }
                         )
                     )
                     .labelsHidden()
@@ -199,14 +222,14 @@ struct ToolCallView: View {
                                 Slider(
                                     value: Binding(
                                         get: {
-                                            Double(store.formInputs[key] ?? String(min)) ?? min
+                                            Double(formInputs[key] ?? String(min)) ?? min
                                         },
-                                        set: { store.send(.updateFormInput(key, String($0))) }
+                                        set: { formInputs[key] = String($0) }
                                     ),
                                     in: min...max,
                                     step: step
                                 )
-                                Text(store.formInputs[key] ?? String(min))
+                                Text(formInputs[key] ?? String(min))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .frame(minWidth: 40)
@@ -217,8 +240,8 @@ struct ToolCallView: View {
                         TextField(
                             "Enter number",
                             text: Binding(
-                                get: { store.formInputs[key] ?? "" },
-                                set: { store.send(.updateFormInput(key, $0)) }
+                                get: { formInputs[key] ?? "" },
+                                set: { formInputs[key] = $0 }
                             )
                         )
                         .textFieldStyle(.roundedBorder)
@@ -239,8 +262,8 @@ struct ToolCallView: View {
                             TextField(
                                 "Enter number",
                                 text: Binding(
-                                    get: { store.formInputs[key] ?? "" },
-                                    set: { store.send(.updateFormInput(key, $0)) }
+                                    get: { formInputs[key] ?? "" },
+                                    set: { formInputs[key] = $0 }
                                 )
                             )
                             .textFieldStyle(.roundedBorder)
@@ -250,8 +273,8 @@ struct ToolCallView: View {
 
                             Stepper(
                                 value: Binding(
-                                    get: { Int(store.formInputs[key] ?? String(min)) ?? min },
-                                    set: { store.send(.updateFormInput(key, String($0))) }
+                                    get: { Int(formInputs[key] ?? String(min)) ?? min },
+                                    set: { formInputs[key] = String($0) }
                                 ),
                                 in: min...max
                             ) {
@@ -263,8 +286,8 @@ struct ToolCallView: View {
                         TextField(
                             "Enter number",
                             text: Binding(
-                                get: { store.formInputs[key] ?? "" },
-                                set: { store.send(.updateFormInput(key, $0)) }
+                                get: { formInputs[key] ?? "" },
+                                set: { formInputs[key] = $0 }
                             )
                         )
                         .textFieldStyle(.roundedBorder)
@@ -280,8 +303,8 @@ struct ToolCallView: View {
                     TextField(
                         "Enter JSON value",
                         text: Binding(
-                            get: { store.formInputs[key] ?? "" },
-                            set: { store.send(.updateFormInput(key, $0)) }
+                            get: { formInputs[key] ?? "" },
+                            set: { formInputs[key] = $0 }
                         )
                     )
                     .textFieldStyle(.roundedBorder)
@@ -298,7 +321,7 @@ struct ToolCallView: View {
             selection: Binding(
                 get: {
                     // Find the current value in enum values
-                    if let currentValue = store.formInputs[key] {
+                    if let currentValue = formInputs[key] {
                         // Try to match against enum value descriptions
                         for enumValue in enumValues {
                             if enumValue.description == currentValue {
@@ -309,7 +332,7 @@ struct ToolCallView: View {
                     // Default to first enum value if no match
                     return enumValues.first?.description ?? ""
                 },
-                set: { store.send(.updateFormInput(key, $0)) }
+                set: { formInputs[key] = $0 }
             )
         ) {
             ForEach(enumValues, id: \.self) { enumValue in
@@ -329,7 +352,7 @@ struct ToolCallView: View {
                 "",
                 selection: Binding(
                     get: {
-                        if let dateString = store.formInputs[key],
+                        if let dateString = formInputs[key],
                            let date = ISO8601DateFormatter().date(from: dateString)
                         {
                             return date
@@ -338,7 +361,7 @@ struct ToolCallView: View {
                     },
                     set: { date in
                         let formatter = ISO8601DateFormatter()
-                        store.send(.updateFormInput(key, formatter.string(from: date)))
+                        formInputs[key] = formatter.string(from: date)
                     }
                 ),
                 displayedComponents: [.date, .hourAndMinute]
@@ -350,7 +373,7 @@ struct ToolCallView: View {
                 "",
                 selection: Binding(
                     get: {
-                        if let dateString = store.formInputs[key] {
+                        if let dateString = formInputs[key] {
                             let formatter = DateFormatter()
                             formatter.dateFormat = "yyyy-MM-dd"
                             if let date = formatter.date(from: dateString) {
@@ -362,7 +385,7 @@ struct ToolCallView: View {
                     set: { date in
                         let formatter = DateFormatter()
                         formatter.dateFormat = "yyyy-MM-dd"
-                        store.send(.updateFormInput(key, formatter.string(from: date)))
+                        formInputs[key] = formatter.string(from: date)
                     }
                 ),
                 displayedComponents: [.date]
@@ -374,7 +397,7 @@ struct ToolCallView: View {
                 "",
                 selection: Binding(
                     get: {
-                        if let timeString = store.formInputs[key] {
+                        if let timeString = formInputs[key] {
                             let formatter = DateFormatter()
                             formatter.dateFormat = "HH:mm:ss"
                             if let date = formatter.date(from: timeString) {
@@ -386,7 +409,7 @@ struct ToolCallView: View {
                     set: { date in
                         let formatter = DateFormatter()
                         formatter.dateFormat = "HH:mm:ss"
-                        store.send(.updateFormInput(key, formatter.string(from: date)))
+                        formInputs[key] = formatter.string(from: date)
                     }
                 ),
                 displayedComponents: [.hourAndMinute]
@@ -397,8 +420,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter email address",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -412,8 +435,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter URL",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -427,8 +450,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter UUID (e.g., 123e4567-e89b-12d3-a456-426614174000)",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -442,8 +465,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter IPv4 address (e.g., 192.168.1.1)",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -458,8 +481,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter IPv6 address",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -473,8 +496,8 @@ struct ToolCallView: View {
             TextField(
                 "Enter hostname (e.g., example.com)",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
@@ -488,11 +511,70 @@ struct ToolCallView: View {
             TextField(
                 "Enter value",
                 text: Binding(
-                    get: { store.formInputs[key] ?? "" },
-                    set: { store.send(.updateFormInput(key, $0)) }
+                    get: { formInputs[key] ?? "" },
+                    set: { formInputs[key] = $0 }
                 )
             )
             .textFieldStyle(.roundedBorder)
         }
+    }
+
+    // MARK: - Actions
+
+    private func callTool() {
+        guard let serverId else {
+            errorMessage = "No server ID provided"
+            return
+        }
+
+        isCallingTool = true
+        toolCallResult = nil
+        errorMessage = nil
+
+        let arguments = Self.convertFormInputsToArguments(formInputs)
+        let toolName = tool.name
+
+        callTask = Task {
+            do {
+                let result = try await serverStore.callTool(
+                    serverID: serverId, name: toolName, arguments: arguments)
+                guard !Task.isCancelled else { return }
+                toolCallResult = result
+            } catch is CancellationError {
+                // Call was cancelled.
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            isCallingTool = false
+        }
+    }
+
+    private func cancelToolCall() {
+        callTask?.cancel()
+        callTask = nil
+        isCallingTool = false
+    }
+
+    private static func convertFormInputsToArguments(_ formInputs: [String: String])
+        -> [String: MCP.Value]
+    {
+        var arguments: [String: MCP.Value] = [:]
+
+        for (key, value) in formInputs {
+            if value.isEmpty { continue }
+
+            if let intValue = Int(value) {
+                arguments[key] = .int(intValue)
+            } else if let doubleValue = Double(value) {
+                arguments[key] = .double(doubleValue)
+            } else if let boolValue = Bool(value) {
+                arguments[key] = .bool(boolValue)
+            } else {
+                arguments[key] = .string(value)
+            }
+        }
+
+        return arguments
     }
 }

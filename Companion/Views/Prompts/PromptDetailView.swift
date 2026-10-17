@@ -1,16 +1,36 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 
 struct PromptDetailView: View {
-    let store: StoreOf<PromptDetailFeature>
+    let prompt: Prompt
+    let serverId: String?
+
+    @Environment(ServerStore.self) private var serverStore
+    @State private var isCallingPrompt = false
+    @State private var promptCallResult: MCP.GetPrompt.Result?
+    @State private var errorMessage: String?
+    @State private var argumentValues: [String: String]
+    @State private var callTask: Task<Void, Never>?
 
     init(prompt: Prompt, serverId: String? = nil) {
-        self.store = Store(
-            initialState: PromptDetailFeature.State(prompt: prompt, serverId: serverId)
-        ) {
-            PromptDetailFeature()
+        self.prompt = prompt
+        self.serverId = serverId
+        _argumentValues = State(
+            initialValue: Dictionary(
+                uniqueKeysWithValues: (prompt.arguments ?? []).map { ($0.name, "") }
+            )
+        )
+    }
+
+    private var allRequiredArgumentsProvided: Bool {
+        guard let arguments = prompt.arguments, !arguments.isEmpty else { return true }
+
+        for argument in arguments where argument.required == true {
+            if argumentValues[argument.name]?.isEmpty != false {
+                return false
+            }
         }
+        return true
     }
 
     var body: some View {
@@ -19,14 +39,14 @@ struct PromptDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Title
                     #if os(macOS)
-                        Text(store.prompt.name)
+                        Text(prompt.name)
                             .font(.title)
                             .fontWeight(.bold)
                             .textSelection(.enabled)
                     #endif
 
                     // Description (if available)
-                    if let description = store.prompt.description, !description.isEmpty {
+                    if let description = prompt.description, !description.isEmpty {
                         Text(description)
                             .font(.body)
                             .foregroundColor(.secondary)
@@ -39,13 +59,13 @@ struct PromptDetailView: View {
                     Label("Use Prompt", systemImage: "play.rectangle")
                         .font(.headline)
 
-                    if let arguments = store.prompt.arguments, !arguments.isEmpty {
+                    if let arguments = prompt.arguments, !arguments.isEmpty {
                         ForEach(arguments, id: \.name) { argument in
                             ArgumentInputView(
                                 argument: argument,
-                                value: store.argumentValues[argument.name] ?? "",
+                                value: argumentValues[argument.name] ?? "",
                                 onValueChange: { newValue in
-                                    store.send(.argumentChanged(argument.name, newValue))
+                                    argumentValues[argument.name] = newValue
                                 }
                             )
                         }
@@ -55,25 +75,32 @@ struct PromptDetailView: View {
                             .foregroundColor(.secondary)
                     }
 
-                    if store.isCallingPrompt {
-                        Button(action: { store.send(.cancelPromptCall) }) {
+                    if isCallingPrompt {
+                        Button(action: { cancelPromptCall() }) {
                             Label("Cancel", systemImage: "xmark.circle.fill")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
                     } else {
-                        Button(action: { store.send(.usePromptTapped) }) {
+                        Button(action: { usePrompt() }) {
                             Text("Submit")
                                 .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.large)
-                        .disabled(store.serverId == nil)
+                        .disabled(serverId == nil)
+                    }
+
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     // Prompt Result
-                    if let result = store.promptCallResult {
+                    if let result = promptCallResult {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Label("Success", systemImage: "checkmark.circle.fill")
@@ -83,7 +110,7 @@ struct PromptDetailView: View {
                                 Spacer()
 
                                 Button("Clear") {
-                                    store.send(.dismissResult)
+                                    promptCallResult = nil
                                 }
                                 .font(.caption)
                             }
@@ -151,7 +178,50 @@ struct PromptDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
-        .navigationTitle(store.prompt.name)
+        .navigationTitle(prompt.name)
+    }
+
+
+    // MARK: - Actions
+
+    private func usePrompt() {
+        guard let serverId else {
+            errorMessage = "No server ID provided"
+            return
+        }
+
+        guard allRequiredArgumentsProvided else {
+            errorMessage = "Please provide all required arguments"
+            return
+        }
+
+        isCallingPrompt = true
+        promptCallResult = nil
+        errorMessage = nil
+
+        let arguments = argumentValues.filter { !$0.value.isEmpty }
+        let promptName = prompt.name
+
+        callTask = Task {
+            do {
+                let result = try await serverStore.getPrompt(
+                    serverID: serverId, name: promptName, arguments: arguments)
+                guard !Task.isCancelled else { return }
+                promptCallResult = result
+            } catch is CancellationError {
+                // Call was cancelled.
+            } catch {
+                guard !Task.isCancelled else { return }
+                errorMessage = error.localizedDescription
+            }
+            isCallingPrompt = false
+        }
+    }
+
+    private func cancelPromptCall() {
+        callTask?.cancel()
+        callTask = nil
+        isCallingPrompt = false
     }
 
     private func formatMessageContent(_ content: Prompt.Message.Content) -> String {
@@ -162,12 +232,14 @@ struct PromptDetailView: View {
             return "[Image: \(mimeType), \(data.count) bytes]"
         case .audio(let data, let mimeType):
             return "[Audio: \(mimeType), \(data.count) bytes]"
-        case .resource(let uri, _, let text, _):
-            if let text = text {
-                return "[Resource: \(uri)]\n\(text)"
+        case .resource(let resource, _, _):
+            if let text = resource.text {
+                return "[Resource: \(resource.uri)]\n\(text)"
             } else {
-                return "[Resource: \(uri)]"
+                return "[Resource: \(resource.uri)]"
             }
+        case .resourceLink(let uri, let name, _, _, _, _):
+            return "[Resource link: \(name)] \(uri)"
         }
     }
 }
