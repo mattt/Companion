@@ -1,57 +1,30 @@
-import ComposableArchitecture
 import SwiftUI
 
 struct ContentView: View {
-    let store: StoreOf<AppFeature>
+    @Environment(ServerStore.self) private var store
     @State private var columnVisibility = NavigationSplitViewVisibility.all
-    @State private var showProgress = false
-
-    private func createServerDetailStore(
-        from store: StoreOf<AppFeature>, selection: SidebarSelection?, server: Server?
-    ) -> StoreOf<ServerDetailFeature>? {
-        guard let selection = selection,
-            let server = server,
-            selection.section == nil,  // Only for server selection, not sections
-            let serverDetailState = store.serverDetails?[id: server.id]
-        else {
-            return nil
-        }
-
-        return store.scope(
-            state: { appState in appState.serverDetails?[id: server.id] ?? serverDetailState },
-            action: { .serverDetail(id: server.id, action: $0) }
-        )
-    }
 
     var body: some View {
+        @Bindable var store = store
+
         Group {
-            if store.serverDetails == nil {
-                ProgressView("Loading servers...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(showProgress ? 1 : 0)
-                    .animation(.easeIn(duration: 0.3), value: showProgress)
-            } else if store.servers.isEmpty {
-                WelcomeView(onAddServer: {
-                    store.send(.presentAddServer)
-                }, onAddExampleServer: {
-                    store.send(.addExampleServer)
-                })
+            if store.servers.isEmpty {
+                WelcomeView(
+                    onAddServer: { store.presentAddServer() },
+                    onAddExampleServer: { store.addExampleServer() }
+                )
             } else {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
-                    SidebarView(store: store)
+                    SidebarView()
                         #if os(macOS)
                             .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
                         #endif
                 } detail: {
                     let selection = store.selection
-                    let server = selection.flatMap { sel in
-                        store.servers.first(where: { $0.id == sel.serverId })
-                    }
+                    let server = selection.flatMap { store.server(id: $0.serverId) }
                     DetailView(
                         selection: selection,
                         server: server,
-                        store: createServerDetailStore(
-                            from: store, selection: selection, server: server),
                         columnVisibility: columnVisibility
                     )
                     #if os(macOS)
@@ -61,37 +34,36 @@ struct ContentView: View {
                 .navigationSplitViewStyle(.balanced)
             }
         }
-        .task {
-            store.send(.task)
-            
-            // Delay showing progress to avoid flash
-            try? await Task.sleep(for: .milliseconds(300))
-            if store.serverDetails == nil {
-                showProgress = true
+        .sheet(item: $store.sheet) { sheet in
+            switch sheet {
+            case .addServer:
+                AddServerSheet(
+                    isPresented: .constant(true),
+                    onAdd: { name, transport in
+                        store.addServer(name: name, configuration: transport)
+                        store.sheet = nil
+                    },
+                    onCancel: { store.sheet = nil }
+                )
+            case .editServer(let server):
+                EditServerSheet(
+                    isPresented: .constant(true),
+                    server: server,
+                    onSave: { name, transport in
+                        store.updateServer(id: server.id, name: name, configuration: transport)
+                        store.sheet = nil
+                    },
+                    onCancel: { store.sheet = nil }
+                )
             }
-        }
-        .sheet(
-            store: store.scope(state: \.$addServer, action: \.addServerPresentation)
-        ) { addServerStore in
-            AddServerSheet(
-                isPresented: .constant(true),
-                onAdd: { name, transport in
-                    addServerStore.send(.addServer(name: name, transport: transport))
-                },
-                onCancel: { addServerStore.send(.dismiss) }
-            )
         }
         #if os(macOS)
             .frame(minWidth: 800, idealWidth: 1200, maxWidth: .infinity, maxHeight: .infinity)
         #endif
     }
-
 }
 
 #Preview {
-    ContentView(
-        store: Store(initialState: AppFeature.State()) {
-            AppFeature()
-        }
-    )
+    ContentView()
+        .environment(ServerStore())
 }

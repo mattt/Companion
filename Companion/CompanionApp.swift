@@ -1,16 +1,13 @@
-import ComposableArchitecture
 import SwiftUI
 
 @main
 struct CompanionApp: App {
+    @State private var serverStore = ServerStore()
+
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                store: Store(initialState: AppFeature.State()) {
-                    AppFeature()
-//                        ._printChanges()
-                }
-            )
+            ContentView()
+                .environment(serverStore)
         }
         #if os(macOS)
             .windowStyle(.hiddenTitleBar)

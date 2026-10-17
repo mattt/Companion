@@ -1,5 +1,4 @@
 import Foundation
-import IdentifiedCollections
 import MCP
 
 struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
@@ -97,7 +96,12 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
         }
     }
     var status: Server.Status = .disconnected
-    
+
+    // Runtime UI state (not persisted; ConfigFile stores name + configuration only)
+    var isConnecting: Bool = false
+    var isLoadingData: Bool = false
+    var errorMessage: String?
+
     var availableTools: [MCP.Tool] = []
     var availablePrompts: [MCP.Prompt] = []
     var availableResources: [MCP.Resource] = []

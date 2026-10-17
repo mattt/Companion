@@ -1,5 +1,3 @@
-import ComposableArchitecture
-import Dependencies
 import SwiftUI
 
 struct AddServerSheet: View {
@@ -18,9 +16,8 @@ struct AddServerSheet: View {
     @State private var url = ""
     @FocusState private var isNameFieldFocused: Bool
 
-    @State private var store = Store(initialState: ConnectionTestFeature.State()) {
-        ConnectionTestFeature()
-    }
+    @Environment(ServerStore.self) private var serverStore
+    @State private var testModel = ConnectionTestModel()
 
     private var isValid: Bool {
         let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -70,13 +67,13 @@ struct AddServerSheet: View {
                         TextField("Server Name", text: $serverName)
                             .focused($isNameFieldFocused)
                             .textFieldStyle(.roundedBorder)
-                            .disabled(store.isTesting)
+                            .disabled(testModel.isTesting)
                             .onSubmit {
                                 if isValid {
                                     addServer()
                                 }
                             }
-                            .onChange(of: serverName, initial: true) { _, _ in store.send(.reset) }
+                            .onChange(of: serverName, initial: true) { _, _ in testModel.reset() }
                     }
 
                     // Transport Configuration
@@ -86,34 +83,34 @@ struct AddServerSheet: View {
 
                         TransportTypeSelector(
                             transportType: $transportType,
-                            isDisabled: store.isTesting
+                            isDisabled: testModel.isTesting
                         )
-                        .onChange(of: transportType, initial: true) { _, _ in store.send(.reset) }
+                        .onChange(of: transportType, initial: true) { _, _ in testModel.reset() }
 
                         TransportConfigurationFields(
                             transportType: transportType,
                             command: $command,
                             arguments: $arguments,
                             url: $url,
-                            isDisabled: store.isTesting,
+                            isDisabled: testModel.isTesting,
                             onSubmit: {
                                 if isValid {
                                     addServer()
                                 }
                             },
-                            onChange: { store.send(.reset) }
+                            onChange: { testModel.reset() }
                         )
                     }
 
                     // Connection Test Section
                     TestConnectionSection(
-                        isTesting: store.isTesting,
-                        hasSucceeded: store.hasSucceeded,
-                        errorMessage: store.errorMessage,
+                        isTesting: testModel.isTesting,
+                        hasSucceeded: testModel.hasSucceeded,
+                        errorMessage: testModel.errorMessage,
                         testAction: { testConnection() },
-                        cancelAction: { store.send(.cancelTest) }
+                        cancelAction: { testModel.cancel() }
                     )
-                    .disabled(!canTestConnection && !store.isTesting)
+                    .disabled(!canTestConnection && !testModel.isTesting)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 20)
@@ -124,13 +121,13 @@ struct AddServerSheet: View {
                     Section {
                         TextField("Server Name", text: $serverName)
                             .focused($isNameFieldFocused)
-                            .disabled(store.isTesting)
+                            .disabled(testModel.isTesting)
                             .onSubmit {
                                 if isValid {
                                     addServer()
                                 }
                             }
-                            .onChange(of: serverName) { _, _ in store.send(.reset) }
+                            .onChange(of: serverName) { _, _ in testModel.reset() }
                     }
 
                     Section(
@@ -149,13 +146,13 @@ struct AddServerSheet: View {
                         .autocapitalization(.none)
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
-                        .disabled(store.isTesting)
+                        .disabled(testModel.isTesting)
                         .onSubmit {
                             if isValid {
                                 addServer()
                             }
                         }
-                        .onChange(of: url) { _, _ in store.send(.reset) }
+                        .onChange(of: url) { _, _ in testModel.reset() }
                     }
                 }
                 .formStyle(.grouped)
@@ -179,7 +176,7 @@ struct AddServerSheet: View {
             isNameFieldFocused = true
         }
         .onDisappear {
-            store.send(.reset)
+            testModel.reset()
         }
     }
 
@@ -251,10 +248,13 @@ struct AddServerSheet: View {
             configuration: configuration
         )
 
-        store.send(.testConnection(testServer))
+        testModel.test(testServer) { server in
+            try await serverStore.testConnection(server)
+        }
     }
 }
 
 #Preview {
-    AddServerSheet(isPresented: .constant(true), onAdd: { _, _  in }, onCancel: {  })
+    AddServerSheet(isPresented: .constant(true), onAdd: { _, _ in }, onCancel: {})
+        .environment(ServerStore())
 }

@@ -1,26 +1,20 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 
 struct SidebarView: View {
-    let store: StoreOf<AppFeature>
+    @Environment(ServerStore.self) private var store
     @FocusState private var isFocused: Bool
 
     @State private var expandedServers: Set<String> = []
 
-    // Extract selection binding as a computed property
-    private var selectionBinding: Binding<SidebarSelection?> {
-        Binding(
-            get: { store.selection },
-            set: { store.send(.selectionChanged($0)) }
-        )
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            let sidebarItems = buildSidebarItems(from: store.serverDetails ?? [])
+        @Bindable var store = store
 
-            List(selection: selectionBinding) {
+        VStack(spacing: 0) {
+            let sidebarItems = buildSidebarItems(from: store.servers)
+
+            List(selection: $store.selection) {
                 listContent(items: sidebarItems)
             }
             #if os(macOS)
@@ -37,33 +31,10 @@ struct SidebarView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { store.send(.presentAddServer) }) {
+                Button(action: { store.presentAddServer() }) {
                     Label("Add Server", systemImage: "plus")
                 }
             }
-        }
-        .sheet(
-            store: store.scope(state: \.$addServer, action: \.addServerPresentation)
-        ) { addServerStore in
-            AddServerSheet(
-                isPresented: .constant(true),
-                onAdd: { name, transport in
-                    addServerStore.send(.addServer(name: name, transport: transport))
-                },
-                onCancel: { addServerStore.send(.dismiss) }
-            )
-        }
-        .sheet(
-            store: store.scope(state: \.$editServer, action: \.editServer)
-        ) { editServerStore in
-            EditServerSheet(
-                isPresented: .constant(true),
-                server: editServerStore.server,
-                onSave: { name, transport in
-                    editServerStore.send(.updateServer(name: name, transport: transport))
-                },
-                onCancel: { editServerStore.send(.dismiss) },
-                store: editServerStore)
         }
     }
 
@@ -83,8 +54,8 @@ struct SidebarView: View {
         ForEach(items, id: \.id) { sidebarItem in
             if case .server(let server) = sidebarItem {
                 Section {
-                    if let serverDetail = store.serverDetails?[id: server.id],
-                        serverDetail.isConnected
+                    if let serverDetail = store.server(id: server.id),
+                        serverDetail.status.isConnected
                     {
                         if expandedServers.contains(server.id) {
                             serverInfoRow(server: server)
@@ -140,16 +111,16 @@ struct SidebarView: View {
     @ViewBuilder
     private func connectionPromptRow(server: Server) -> some View {
         Button {
-            if let serverDetail = store.serverDetails?[id: server.id] {
+            if let serverDetail = store.server(id: server.id) {
                 if serverDetail.isConnecting {
-                    store.send(.serverDetail(id: server.id, action: .cancel))
+                    store.cancelConnect(serverID: server.id)
                 } else {
-                    store.send(.serverDetail(id: server.id, action: .connect))
+                    store.connect(serverID: server.id)
                 }
             }
         } label: {
             HStack(spacing: 12) {
-                if let serverDetail = store.serverDetails?[id: server.id],
+                if let serverDetail = store.server(id: server.id),
                     serverDetail.isConnecting
                 {
                     ProgressView()
@@ -172,7 +143,7 @@ struct SidebarView: View {
                 }
 
                 Text(
-                    store.serverDetails?[id: server.id]?.isConnecting == true
+                    store.server(id: server.id)?.isConnecting == true
                         ? "Connecting..."
                         : "Connect to Server"
                 )
@@ -263,12 +234,8 @@ struct SidebarView: View {
         }
     }
 
-    private func buildSidebarItems(from serverDetails: IdentifiedArrayOf<ServerDetailFeature.State>)
-        -> [SidebarItem]
-    {
-        return serverDetails.map { serverDetail in
-            return .server(serverDetail.server)
-        }
+    private func buildSidebarItems(from servers: [Server]) -> [SidebarItem] {
+        servers.map { .server($0) }
     }
 
     private func toggleServerExpansion(_ serverId: String, isExpanded: Bool) {
@@ -307,19 +274,19 @@ struct SidebarView: View {
             HStack(spacing: 4) {
                 // Add connection status indicator for server items
                 if case .server(let server) = sidebarItem,
-                    let serverDetail = store.serverDetails?[id: server.id]
+                    let serverDetail = store.server(id: server.id)
                 {
                     #if os(macOS)
                         ConnectionButton(
-                            isConnected: serverDetail.isConnected,
+                            isConnected: serverDetail.status.isConnected,
                             isConnecting: serverDetail.isConnecting,
                             action: {
-                                if serverDetail.isConnected {
-                                    store.send(.serverDetail(id: server.id, action: .disconnect))
+                                if serverDetail.status.isConnected {
+                                    store.disconnect(serverID: server.id)
                                 } else if serverDetail.isConnecting {
-                                    store.send(.serverDetail(id: server.id, action: .cancel))
+                                    store.cancelConnect(serverID: server.id)
                                 } else {
-                                    store.send(.serverDetail(id: server.id, action: .connect))
+                                    store.connect(serverID: server.id)
                                 }
                             }
                         )
@@ -372,27 +339,27 @@ struct SidebarView: View {
 
         .contextMenu {
             if case .server(let server) = sidebarItem {
-                if let serverDetail = store.serverDetails?[id: server.id] {
-                    if serverDetail.isConnected {
+                if let serverDetail = store.server(id: server.id) {
+                    if serverDetail.status.isConnected {
                         Button("Disconnect") {
-                            store.send(.serverDetail(id: server.id, action: .disconnect))
+                            store.disconnect(serverID: server.id)
                         }
                     } else {
                         Button("Connect") {
-                            store.send(.serverDetail(id: server.id, action: .connect))
+                            store.connect(serverID: server.id)
                         }
                     }
 
                     Divider()
                     Button("Edit Server") {
-                        store.send(.presentEditServer(server))
+                        store.presentEditServer(server)
                     }
                     Button("Refresh") {
-                        store.send(.serverDetail(id: server.id, action: .refresh))
+                        store.refresh(serverID: server.id)
                     }
                     Divider()
                     Button("Remove Server", role: .destructive) {
-                        store.send(.removeServer(id: server.id))
+                        store.removeServer(id: server.id)
                     }
                 }
             }
@@ -403,7 +370,7 @@ struct SidebarView: View {
     private func sidebarServerHeader(for server: Server) -> some View {
         #if os(macOS)
             Button {
-                store.send(.selectionChanged(.server(server)))
+                store.selection = .server(server)
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "server.rack")
@@ -418,20 +385,20 @@ struct SidebarView: View {
                             .lineLimit(1)
 
                         // Show connection status
-                        if let serverDetail = store.serverDetails?[id: server.id] {
+                        if let serverDetail = store.server(id: server.id) {
                             ServerConnectionStatusView(
                                 serverId: server.id,
-                                status: serverDetail.serverStatus,
+                                status: serverDetail.status,
                                 isConnecting: serverDetail.isConnecting,
                                 isLoadingData: serverDetail.isLoadingData,
                                 onConnect: {
-                                    store.send(.serverDetail(id: server.id, action: .connect))
+                                    store.connect(serverID: server.id)
                                 },
                                 onDisconnect: {
-                                    store.send(.serverDetail(id: server.id, action: .disconnect))
+                                    store.disconnect(serverID: server.id)
                                 },
                                 onCancel: {
-                                    store.send(.serverDetail(id: server.id, action: .cancel))
+                                    store.cancelConnect(serverID: server.id)
                                 }
                             )
                         }
@@ -440,7 +407,7 @@ struct SidebarView: View {
                     Spacer()
 
                     Button(action: {
-                        store.send(.serverDetail(id: server.id, action: .refresh))
+                        store.refresh(serverID: server.id)
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 14))
@@ -462,27 +429,27 @@ struct SidebarView: View {
             }
             .buttonStyle(.plain)
             .contextMenu {
-                if let serverDetail = store.serverDetails?[id: server.id] {
-                    if serverDetail.isConnected {
+                if let serverDetail = store.server(id: server.id) {
+                    if serverDetail.status.isConnected {
                         Button("Disconnect") {
-                            store.send(.serverDetail(id: server.id, action: .disconnect))
+                            store.disconnect(serverID: server.id)
                         }
                     } else {
                         Button("Connect") {
-                            store.send(.serverDetail(id: server.id, action: .connect))
+                            store.connect(serverID: server.id)
                         }
                     }
 
                     Divider()
                     Button("Edit Server") {
-                        store.send(.presentEditServer(server))
+                        store.presentEditServer(server)
                     }
                     Button("Refresh") {
-                        store.send(.serverDetail(id: server.id, action: .refresh))
+                        store.refresh(serverID: server.id)
                     }
                     Divider()
                     Button("Remove Server", role: .destructive) {
-                        store.send(.removeServer(id: server.id))
+                        store.removeServer(id: server.id)
                     }
                 }
             }
@@ -500,8 +467,8 @@ struct SidebarView: View {
                         .foregroundColor(.secondary)
                         .tracking(0.5)
 
-                    if let serverDetail = store.serverDetails?[id: server.id],
-                        serverDetail.isConnected
+                    if let serverDetail = store.server(id: server.id),
+                        serverDetail.status.isConnected
                     {
                         Spacer()
 
@@ -573,27 +540,27 @@ struct SidebarView: View {
             )
         #endif
         .contextMenu {
-            if let serverDetail = store.serverDetails?[id: server.id] {
-                if serverDetail.isConnected {
+            if let serverDetail = store.server(id: server.id) {
+                if serverDetail.status.isConnected {
                     Button("Disconnect") {
-                        store.send(.serverDetail(id: server.id, action: .disconnect))
+                        store.disconnect(serverID: server.id)
                     }
                 } else {
                     Button("Connect") {
-                        store.send(.serverDetail(id: server.id, action: .connect))
+                        store.connect(serverID: server.id)
                     }
                 }
 
                 Divider()
                 Button("Edit Server") {
-                    store.send(.presentEditServer(server))
+                    store.presentEditServer(server)
                 }
                 Button("Refresh") {
-                    store.send(.serverDetail(id: server.id, action: .refresh))
+                    store.refresh(serverID: server.id)
                 }
                 Divider()
                 Button("Remove Server", role: .destructive) {
-                    store.send(.removeServer(id: server.id))
+                    store.removeServer(id: server.id)
                 }
             }
         }

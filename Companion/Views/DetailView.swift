@@ -1,11 +1,9 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 
 struct DetailView: View {
     let selection: SidebarSelection?
     let server: Server?
-    let store: StoreOf<ServerDetailFeature>?
     let columnVisibility: NavigationSplitViewVisibility
 
     var body: some View {
@@ -20,27 +18,38 @@ struct DetailView: View {
                         // Individual item selected
                         switch section {
                         case .prompts:
-                            if let prompt = server.availablePrompts.first(where: { $0.name == itemId }) {
+                            if let prompt = server.availablePrompts.first(where: {
+                                $0.name == itemId
+                            }) {
                                 PromptDetailView(prompt: prompt, serverId: serverId)
+                                    .id("\(serverId)-prompt-\(prompt.name)")
                             } else {
                                 EmptyStateView()
                             }
                         case .resources:
-                            if let resource = server.availableResources.first(where: { $0.uri == itemId }) {
-                                ResourceDetailView(resource: resource, serverId: serverId)
-                            } else if let template = server.availableResourceTemplates.first(where: {
-                                $0.uriTemplate == itemId
+                            if let resource = server.availableResources.first(where: {
+                                $0.uri == itemId
                             }) {
+                                ResourceDetailView(resource: resource, serverId: serverId)
+                                    .id("\(serverId)-resource-\(resource.uri)")
+                            } else if let template = server.availableResourceTemplates.first(
+                                where: {
+                                    $0.uriTemplate == itemId
+                                }) {
                                 ResourceDetailView(template: template, serverId: serverId)
+                                    .id("\(serverId)-template-\(template.uriTemplate)")
                             } else {
                                 EmptyStateView()
                             }
                         case .tools:
-                            if let tool = server.availableTools.first(where: { $0.name == itemId }) {
+                            if let tool = server.availableTools.first(where: {
+                                $0.name == itemId
+                            }) {
                                 ToolDetailView(
                                     tool: tool,
                                     serverId: server.id
                                 )
+                                .id("\(serverId)-tool-\(tool.name)")
                             } else {
                                 EmptyStateView()
                             }
@@ -69,11 +78,7 @@ struct DetailView: View {
                     }
                 } else {
                     // Server selected
-                    if let store = store {
-                        ServerDetailView(store: store)
-                    } else {
-                        Text("Server not found")
-                    }
+                    ServerDetailView(serverID: serverId)
                 }
             } else {
                 EmptyStateView()

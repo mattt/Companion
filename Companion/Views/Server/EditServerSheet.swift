@@ -1,4 +1,3 @@
-import ComposableArchitecture
 import SwiftUI
 
 struct EditServerSheet: View {
@@ -14,19 +13,18 @@ struct EditServerSheet: View {
     @State private var url: String
     @FocusState private var isNameFieldFocused: Bool
 
-    let store: StoreOf<EditServerFeature>
+    @Environment(ServerStore.self) private var serverStore
+    @State private var testModel = ConnectionTestModel()
 
     init(
         isPresented: Binding<Bool>, server: Server,
         onSave: @escaping (String, ConfigFile.Entry) -> Void,
-        onCancel: (() -> Void)?,
-        store: StoreOf<EditServerFeature>
+        onCancel: (() -> Void)?
     ) {
         self._isPresented = isPresented
         self.server = server
         self.onSave = onSave
         self.onCancel = onCancel
-        self.store = store
 
         // Initialize state from server
         let config = server.configuration
@@ -94,13 +92,13 @@ struct EditServerSheet: View {
                         TextField("Server Name", text: $serverName)
                             .focused($isNameFieldFocused)
                             .textFieldStyle(.roundedBorder)
-                            .disabled(store.connectionTest.isTesting)
+                            .disabled(testModel.isTesting)
                             .onSubmit {
                                 if isValid {
                                     saveServer()
                                 }
                             }
-                            .onChange(of: serverName, initial: true) { _, _ in store.send(.connectionTest(.reset)) }
+                            .onChange(of: serverName, initial: true) { _, _ in testModel.reset() }
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -109,36 +107,33 @@ struct EditServerSheet: View {
 
                         TransportTypeSelector(
                             transportType: $transportType,
-                            isDisabled: store.connectionTest.isTesting
+                            isDisabled: testModel.isTesting
                         )
-                        .onChange(of: transportType, initial: true) { _, _ in store.send(.connectionTest(.reset)) }
+                        .onChange(of: transportType, initial: true) { _, _ in testModel.reset() }
 
                         TransportConfigurationFields(
                             transportType: transportType,
                             command: $command,
                             arguments: $arguments,
                             url: $url,
-                            isDisabled: store.connectionTest.isTesting,
+                            isDisabled: testModel.isTesting,
                             onSubmit: {
                                 if isValid {
                                     saveServer()
                                 }
                             },
-                            onChange: { store.send(.connectionTest(.reset)) }
+                            onChange: { testModel.reset() }
                         )
                     }
 
                     TestConnectionSection(
-                        isTesting: store.connectionTest.isTesting,
-                        hasSucceeded: store.connectionTest.hasSucceeded,
-                        errorMessage: store.connectionTest.errorMessage,
-                        testAction: { 
-                            // Update store state and trigger test
-                            store.send(.testConnection)
-                        },
-                        cancelAction: { store.send(.connectionTest(.cancelTest)) }
+                        isTesting: testModel.isTesting,
+                        hasSucceeded: testModel.hasSucceeded,
+                        errorMessage: testModel.errorMessage,
+                        testAction: { testConnection() },
+                        cancelAction: { testModel.cancel() }
                     )
-                    .disabled(!canTestConnection && !store.connectionTest.isTesting)
+                    .disabled(!canTestConnection && !testModel.isTesting)
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 20)
@@ -200,7 +195,45 @@ struct EditServerSheet: View {
             isNameFieldFocused = true
         }
         .onDisappear {
-            store.send(.connectionTest(.reset))
+            testModel.reset()
+        }
+    }
+
+    private func testConnection() {
+        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let configuration: ConfigFile.Entry
+
+        #if os(macOS)
+            switch transportType {
+            case .stdio:
+                let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let trimmedArgs = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
+                let argArray =
+                    trimmedArgs.isEmpty ? [] : trimmedArgs.split(separator: " ").map(String.init)
+
+                configuration = ConfigFile.Entry(stdio: trimmedCommand, arguments: argArray)
+
+            case .http:
+                let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                configuration = ConfigFile.Entry(http: trimmedUrl)
+            }
+        #else
+            let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedUrl.isEmpty else { return }
+
+            configuration = ConfigFile.Entry(http: trimmedUrl)
+        #endif
+
+        let testServer = Server(
+            name: trimmedName.isEmpty ? "Test Server" : trimmedName,
+            configuration: configuration
+        )
+
+        testModel.test(testServer) { server in
+            try await serverStore.testConnection(server)
         }
     }
 

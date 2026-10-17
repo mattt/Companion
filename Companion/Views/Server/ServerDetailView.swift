@@ -1,15 +1,18 @@
-import ComposableArchitecture
 import MCP
 import SwiftUI
 
 struct ServerDetailView: View {
-    let store: StoreOf<ServerDetailFeature>
+    @Environment(ServerStore.self) private var store
+    let serverID: String
 
     @State private var showingActionSheet = false
 
-    private var server: Server { store.server }
-    private var isConnecting: Bool { store.isConnecting }
-    private var isConnected: Bool { store.isConnected }
+    private var server: Server {
+        store.server(id: serverID)
+            ?? Server(id: serverID, name: "", configuration: .init(stdio: ""))
+    }
+    private var isConnecting: Bool { server.isConnecting }
+    private var isConnected: Bool { server.status.isConnected }
 
     var body: some View {
         #if os(iOS)
@@ -26,7 +29,7 @@ struct ServerDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
-                            store.send(.edit)
+                            store.presentEditServer(server)
                         } label: {
                             Label("Edit Server", systemImage: "square.and.pencil")
                         }
@@ -39,7 +42,7 @@ struct ServerDetailView: View {
 
                         if isConnected {
                             Button {
-                                store.send(.restart)
+                                store.restart(serverID: serverID)
                             } label: {
                                 Label("Restart", systemImage: "arrow.clockwise")
                             }
@@ -47,11 +50,11 @@ struct ServerDetailView: View {
 
                         Button {
                             if isConnecting {
-                                store.send(.cancel)
+                                store.cancelConnect(serverID: serverID)
                             } else if isConnected {
-                                store.send(.disconnect)
+                                store.disconnect(serverID: serverID)
                             } else {
-                                store.send(.connect)
+                                store.connect(serverID: serverID)
                             }
                         } label: {
                             Label(
@@ -65,20 +68,20 @@ struct ServerDetailView: View {
             }
             .confirmationDialog("Server Actions", isPresented: $showingActionSheet) {
                 Button("Edit Server") {
-                    store.send(.edit)
+                    store.presentEditServer(server)
                 }
 
                 if isConnected {
                     Button("Restart") {
-                        store.send(.restart)
+                        store.restart(serverID: serverID)
                     }
                 }
 
                 Button(isConnected ? "Disconnect" : "Connect") {
                     if isConnected {
-                        store.send(.disconnect)
+                        store.disconnect(serverID: serverID)
                     } else {
-                        store.send(.connect)
+                        store.connect(serverID: serverID)
                     }
                 }
 
@@ -98,9 +101,9 @@ struct ServerDetailView: View {
                 } else {
                     ServerConnectionStateView(
                         isConnecting: isConnecting,
-                        onConnect: { store.send(.connect) },
-                        onCancel: { store.send(.cancel) },
-                        onEdit: { store.send(.edit) }
+                        onConnect: { store.connect(serverID: serverID) },
+                        onCancel: { store.cancelConnect(serverID: serverID) },
+                        onEdit: { store.presentEditServer(server) }
                     )
                 }
             }
@@ -138,10 +141,10 @@ struct ServerDetailView: View {
                     ServerActionMenu(
                         isConnected: isConnected,
                         isConnecting: isConnecting,
-                        onConnect: { store.send(.connect) },
-                        onDisconnect: { store.send(.disconnect) },
-                        onCancel: { store.send(.cancel) },
-                        onEdit: { store.send(.edit) }
+                        onConnect: { store.connect(serverID: serverID) },
+                        onDisconnect: { store.disconnect(serverID: serverID) },
+                        onCancel: { store.cancelConnect(serverID: serverID) },
+                        onEdit: { store.presentEditServer(server) }
                     )
                 }
             }

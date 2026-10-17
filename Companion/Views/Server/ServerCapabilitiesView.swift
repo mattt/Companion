@@ -37,17 +37,6 @@ struct ServerCapabilitiesView: View {
                 ))
         }
 
-        if capabilities.sampling != nil {
-            groups.append(
-                CapabilityGroup(
-                    id: "sampling",
-                    title: "Sampling",
-                    description: "Supports sampling completions",
-                    icon: "text.cursor",
-                    features: []
-                ))
-        }
-
         // Prompts
         if let prompts = capabilities.prompts {
             var features: [String] = []
@@ -297,7 +286,6 @@ struct CapabilityGroup {
                         logging: MCP.Server.Capabilities.Logging(),
                         prompts: MCP.Server.Capabilities.Prompts(listChanged: true),
                         resources: MCP.Server.Capabilities.Resources(subscribe: true, listChanged: true),
-                        sampling: MCP.Server.Capabilities.Sampling(),
                         tools: MCP.Server.Capabilities.Tools(listChanged: true)
                     ))
             }
