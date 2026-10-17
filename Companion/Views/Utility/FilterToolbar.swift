@@ -9,7 +9,6 @@ struct FilterToolbar: View {
     @Binding var searchText: String
     let placeholder: String
     let width: CGFloat
-    let isVisible: Bool
 
     var body: some View {
         #if os(macOS)
@@ -17,8 +16,6 @@ struct FilterToolbar: View {
                 field
                     .padding(.horizontal, 10)
                     .frame(width: max(width - 20, 180))
-                    .opacity(isVisible ? 1 : 0)
-                    .animation(nil, value: isVisible)
             } else {
                 field
                     .padding(.leading, 10)
@@ -30,8 +27,6 @@ struct FilterToolbar: View {
                             .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
                     )
                     .frame(width: width - 20)
-                    .opacity(isVisible ? 1 : 0)
-                    .animation(nil, value: isVisible)
             }
         #else
             EmptyView()

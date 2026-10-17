@@ -112,13 +112,15 @@ struct ToolListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    if !tools.isEmpty {
+                    // Omit the item entirely when the sidebar is hidden.
+                    // Fading the field out would leave its empty glass
+                    // capsule behind in the toolbar on macOS 26 and later.
+                    if !tools.isEmpty, columnVisibility == .all {
                         ToolbarItemGroup(placement: .navigation) {
                             FilterToolbar(
                                 searchText: $searchText,
                                 placeholder: "Filter tools",
-                                width: leftPaneWidth,
-                                isVisible: columnVisibility == .all
+                                width: leftPaneWidth
                             )
                         }
                     }

@@ -181,13 +181,15 @@ struct ResourceListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    if !(resources.isEmpty && templates.isEmpty) {
+                    // Omit the item entirely when the sidebar is hidden.
+                    // Fading the field out would leave its empty glass
+                    // capsule behind in the toolbar on macOS 26 and later.
+                    if !(resources.isEmpty && templates.isEmpty), columnVisibility == .all {
                         ToolbarItemGroup(placement: .navigation) {
                             FilterToolbar(
                                 searchText: $searchText,
                                 placeholder: "Filter resources",
-                                width: leftPaneWidth,
-                                isVisible: columnVisibility == .all
+                                width: leftPaneWidth
                             )
                         }
                     }

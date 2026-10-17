@@ -106,13 +106,15 @@ struct PromptListView: View {
                         placeholderView
                     }
                 }.toolbar {
-                    if !prompts.isEmpty {
+                    // Omit the item entirely when the sidebar is hidden.
+                    // Fading the field out would leave its empty glass
+                    // capsule behind in the toolbar on macOS 26 and later.
+                    if !prompts.isEmpty, columnVisibility == .all {
                         ToolbarItemGroup(placement: .navigation) {
                             FilterToolbar(
                                 searchText: $searchText,
                                 placeholder: "Filter prompts",
-                                width: leftPaneWidth,
-                                isVisible: columnVisibility == .all
+                                width: leftPaneWidth
                             )
                         }
                     }
