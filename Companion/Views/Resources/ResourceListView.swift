@@ -64,6 +64,7 @@ struct ResourceListView: View {
     @State private var selectedResourceID: String?
     @State private var leftPaneWidth: CGFloat = 350
     @State private var searchText: String = ""
+    @FocusState private var isListFocused: Bool
 
     private var allResources: [ResourceItem] {
         let resourceItems = resources.map { ResourceItem.resource($0) }
@@ -146,6 +147,11 @@ struct ResourceListView: View {
                                     .tag(resourceItem.id)
                             }
                             .listStyle(.sidebar)
+                            .focused($isListFocused)
+                            .onAppear { isListFocused = true }
+                            .onMoveCommand { direction in
+                                moveSelection(direction)
+                            }
                             .background(
                                 GeometryReader { geo in
                                     WidthPassthroughView(width: geo.size.width) {
@@ -223,6 +229,28 @@ struct ResourceListView: View {
             }
         }
     }
+
+    #if os(macOS)
+        private func moveSelection(_ direction: MoveCommandDirection) {
+            guard !filteredResources.isEmpty else { return }
+
+            let currentIndex = selectedResourceID.flatMap { selectedID in
+                filteredResources.firstIndex { $0.id == selectedID }
+            }
+
+            let nextIndex: Int
+            switch direction {
+            case .up:
+                nextIndex = max((currentIndex ?? 0) - 1, 0)
+            case .down:
+                nextIndex = min((currentIndex ?? -1) + 1, filteredResources.count - 1)
+            default:
+                return
+            }
+
+            selectedResourceID = filteredResources[nextIndex].id
+        }
+    #endif
 }
 
 private struct ResourceRowView: View {

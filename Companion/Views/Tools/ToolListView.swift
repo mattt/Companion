@@ -9,6 +9,7 @@ struct ToolListView: View {
     @State private var selectedTool: Tool?
     @State private var leftPaneWidth: CGFloat = 350
     @State private var searchText: String = ""
+    @FocusState private var isListFocused: Bool
 
     private var filteredTools: [Tool] {
         if searchText.isEmpty {
@@ -79,6 +80,11 @@ struct ToolListView: View {
                                 }
                             }
                             .listStyle(.sidebar)
+                            .focused($isListFocused)
+                            .onAppear { isListFocused = true }
+                            .onMoveCommand { direction in
+                                moveSelection(direction)
+                            }
                             .background(
                                 GeometryReader { geo in
                                     // Use WidthPassthroughView to update leftPaneWidth directly via .task
@@ -152,6 +158,28 @@ struct ToolListView: View {
             }
         }
     }
+
+    #if os(macOS)
+        private func moveSelection(_ direction: MoveCommandDirection) {
+            guard !filteredTools.isEmpty else { return }
+
+            let currentIndex = selectedTool.flatMap { selected in
+                filteredTools.firstIndex { $0.name == selected.name }
+            }
+
+            let nextIndex: Int
+            switch direction {
+            case .up:
+                nextIndex = max((currentIndex ?? 0) - 1, 0)
+            case .down:
+                nextIndex = min((currentIndex ?? -1) + 1, filteredTools.count - 1)
+            default:
+                return
+            }
+
+            selectedTool = filteredTools[nextIndex]
+        }
+    #endif
 }
 
 private struct ToolRowView: View {

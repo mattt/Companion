@@ -8,6 +8,7 @@ struct PromptListView: View {
     @State private var selectedPrompt: Prompt?
     @State private var leftPaneWidth: CGFloat = 350
     @State private var searchText: String = ""
+    @FocusState private var isListFocused: Bool
 
     private var filteredPrompts: [Prompt] {
         if searchText.isEmpty {
@@ -77,6 +78,11 @@ struct PromptListView: View {
                                 }
                             }
                             .listStyle(.sidebar)
+                            .focused($isListFocused)
+                            .onAppear { isListFocused = true }
+                            .onMoveCommand { direction in
+                                moveSelection(direction)
+                            }
                             .background(
                                 GeometryReader { geo in
                                     WidthPassthroughView(width: geo.size.width) {
@@ -143,6 +149,28 @@ struct PromptListView: View {
             }
         }
     }
+
+    #if os(macOS)
+        private func moveSelection(_ direction: MoveCommandDirection) {
+            guard !filteredPrompts.isEmpty else { return }
+
+            let currentIndex = selectedPrompt.flatMap { selected in
+                filteredPrompts.firstIndex { $0.name == selected.name }
+            }
+
+            let nextIndex: Int
+            switch direction {
+            case .up:
+                nextIndex = max((currentIndex ?? 0) - 1, 0)
+            case .down:
+                nextIndex = min((currentIndex ?? -1) + 1, filteredPrompts.count - 1)
+            default:
+                return
+            }
+
+            selectedPrompt = filteredPrompts[nextIndex]
+        }
+    #endif
 }
 
 struct PromptRowView: View {
