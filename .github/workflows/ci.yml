@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep Xcode
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Build (macOS)
+        run: |
+          xcodebuild -scheme Companion \
+            -workspace Companion.xcodeproj/project.xcworkspace \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build (iOS Simulator)
+        run: |
+          xcodebuild -scheme Companion \
+            -workspace Companion.xcodeproj/project.xcworkspace \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Build (visionOS Simulator)
+        run: |
+          xcodebuild -scheme Companion \
+            -workspace Companion.xcodeproj/project.xcworkspace \
+            -destination 'generic/platform=visionOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Test (unit tests, macOS)
+        run: |
+          xcodebuild -scheme Companion \
+            -workspace Companion.xcodeproj/project.xcworkspace \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test -only-testing:CompanionTests
