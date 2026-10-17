@@ -60,7 +60,9 @@ struct WelcomeView: View {
                         .font(.caption)
                         .foregroundStyle(.blue)
                     }
-                    .pointerStyle(.link)
+                    #if os(macOS)
+                        .pointerStyle(.link)
+                    #endif
                 }
             }
             .padding(12)
