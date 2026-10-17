@@ -176,28 +176,14 @@ struct ResourceListView: View {
                     }
                 }.toolbar {
                     if !(resources.isEmpty && templates.isEmpty) {
-                        #if os(macOS)
-//                        if #available(macOS 26.0, *) {
-//                            ToolbarItemGroup(placement: .navigation) {
-//                                FilterToolbar(
-//                                    searchText: $searchText,
-//                                    placeholder: "Filter resources",
-//                                    width: leftPaneWidth,
-//                                    isVisible: columnVisibility == .all
-//                                )
-//                            }
-//                            .sharedBackgroundVisibility(Visibility.hidden)
-//                        } else {
-                            ToolbarItemGroup(placement: .navigation) {
-                                FilterToolbar(
-                                    searchText: $searchText,
-                                    placeholder: "Filter resources",
-                                    width: leftPaneWidth,
-                                    isVisible: columnVisibility == .all
-                                )
-                            }
-//                        }
-                        #endif
+                        ToolbarItemGroup(placement: .navigation) {
+                            FilterToolbar(
+                                searchText: $searchText,
+                                placeholder: "Filter resources",
+                                width: leftPaneWidth,
+                                isVisible: columnVisibility == .all
+                            )
+                        }
                     }
                 }
             #else

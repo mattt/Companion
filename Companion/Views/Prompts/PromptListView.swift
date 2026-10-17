@@ -101,28 +101,14 @@ struct PromptListView: View {
                     }
                 }.toolbar {
                     if !prompts.isEmpty {
-                        #if os(macOS)
-//                        if #available(macOS 26.0, *) {
-//                            ToolbarItemGroup(placement: .navigation) {
-//                                FilterToolbar(
-//                                    searchText: $searchText,
-//                                    placeholder: "Filter prompts",
-//                                    width: leftPaneWidth,
-//                                    isVisible: columnVisibility == .all && !prompts.isEmpty
-//                                )
-//                            }
-//                            .sharedBackgroundVisibility(Visibility.hidden)
-//                        } else {
-                            ToolbarItemGroup(placement: .navigation) {
-                                FilterToolbar(
-                                    searchText: $searchText,
-                                    placeholder: "Filter prompts",
-                                    width: leftPaneWidth,
-                                    isVisible: columnVisibility == .all
-                                )
-                            }
-//                        }
-                        #endif
+                        ToolbarItemGroup(placement: .navigation) {
+                            FilterToolbar(
+                                searchText: $searchText,
+                                placeholder: "Filter prompts",
+                                width: leftPaneWidth,
+                                isVisible: columnVisibility == .all
+                            )
+                        }
                     }
                 }
             #else
