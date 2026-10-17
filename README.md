@@ -59,10 +59,10 @@ Or, select the parent item in the sidebar to get information about the server.
 
 ## Requirements
 
-- Xcode 16.3+
-- macOS Sequoia 15+
-- iOS / iPadOS 16+
-- visionOS 2+
+- Xcode 27+
+- macOS Sequoia 15.4+
+- iOS / iPadOS 18.4+
+- visionOS 2.4+
 
 ## License
 
