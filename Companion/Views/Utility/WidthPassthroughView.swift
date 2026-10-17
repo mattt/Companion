@@ -14,7 +14,7 @@ struct WidthPassthroughView: View {
 }
 
 struct WidthPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()  // Use the latest reported width
     }
