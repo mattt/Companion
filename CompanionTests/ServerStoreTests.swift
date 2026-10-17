@@ -1,0 +1,304 @@
+import Foundation
+import MCP
+import Testing
+
+@testable import Companion
+
+// MARK: - Fakes
+
+actor FakeServerConnection: ServerConnecting {
+    var result: ServerConnectionResult
+    var connectError: (any Error)?
+    var connectDelay: Duration = .zero
+    var tools: [MCP.Tool]
+
+    private(set) var connectCalls: [String] = []
+    private(set) var disconnectCalls: [String] = []
+    private(set) var testCalls: [String] = []
+
+    init(result: ServerConnectionResult = .stub) {
+        self.result = result
+        self.tools = result.tools
+    }
+
+    func setConnectDelay(_ delay: Duration) { connectDelay = delay }
+    func setConnectError(_ error: (any Error)?) { connectError = error }
+    func setTools(_ tools: [MCP.Tool]) { self.tools = tools }
+
+    func connect(_ server: Companion.Server) async throws -> ServerConnectionResult {
+        connectCalls.append(server.id)
+        if connectDelay > .zero {
+            try await Task.sleep(for: connectDelay)
+        }
+        if let connectError {
+            throw connectError
+        }
+        return result
+    }
+
+    func disconnect(serverID: String) async {
+        disconnectCalls.append(serverID)
+    }
+
+    func testConnection(_ server: Companion.Server) async throws {
+        testCalls.append(server.id)
+        if let connectError {
+            throw connectError
+        }
+    }
+
+    func listTools(serverID: String) async throws -> [MCP.Tool] { tools }
+    func listPrompts(serverID: String) async throws -> [MCP.Prompt] { result.prompts }
+    func listResources(serverID: String) async throws -> [MCP.Resource] { result.resources }
+    func listResourceTemplates(serverID: String) async throws -> [MCP.Resource.Template] {
+        result.resourceTemplates
+    }
+
+    func callTool(serverID: String, name: String, arguments: [String: Value]) async throws
+        -> MCP.CallTool.Result
+    {
+        MCP.CallTool.Result(
+            content: [.text(text: "ok", annotations: nil, _meta: nil)], isError: false)
+    }
+
+    func getPrompt(serverID: String, name: String, arguments: [String: String]) async throws
+        -> MCP.GetPrompt.Result
+    {
+        MCP.GetPrompt.Result(description: "desc", messages: [])
+    }
+
+    func readResource(serverID: String, uri: String) async throws -> MCP.ReadResource.Result {
+        MCP.ReadResource.Result(contents: [])
+    }
+}
+
+extension ServerConnectionResult {
+    static var stub: ServerConnectionResult {
+        ServerConnectionResult(
+            serverInfo: MCP.Server.Info(name: "Fake", version: "1.0"),
+            protocolVersion: "2025-03-26",
+            capabilities: MCP.Server.Capabilities(
+                prompts: .init(), resources: .init(), tools: .init()),
+            instructions: nil,
+            tools: [Tool(name: "echo", description: "Echo", inputSchema: .object([:]))],
+            prompts: [],
+            resources: [],
+            resourceTemplates: []
+        )
+    }
+}
+
+final class InMemoryConfigStore: ServerConfigStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: ConfigFile
+    private(set) var savedConfigs: [ConfigFile] = []
+
+    init(stored: ConfigFile = .empty) {
+        self.stored = stored
+    }
+
+    func load() throws -> ConfigFile {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func save(_ config: ConfigFile) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        stored = config
+        savedConfigs.append(config)
+    }
+}
+
+// MARK: - Helpers
+
+@MainActor
+private func eventually(
+    _ description: String,
+    timeout: Duration = .seconds(5),
+    condition: @MainActor () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        if ContinuousClock.now > deadline {
+            Issue.record("Timed out waiting for: \(description)")
+            return
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+private func eventuallyAsync(
+    _ description: String,
+    timeout: Duration = .seconds(5),
+    condition: @Sendable () async -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while !(await condition()) {
+        if ContinuousClock.now > deadline {
+            Issue.record("Timed out waiting for: \(description)")
+            return
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+// MARK: - Tests
+
+@MainActor
+struct ServerStoreTests {
+    private func makeStore(
+        connection: FakeServerConnection = FakeServerConnection(),
+        configStore: InMemoryConfigStore = InMemoryConfigStore()
+    ) -> ServerStore {
+        ServerStore(connection: connection, configStore: configStore)
+    }
+
+    @Test func loadsServersFromConfigStore() {
+        let config = ConfigFile(servers: [
+            Server(name: "Saved", configuration: .init(stdio: "node"))
+        ])
+        let store = makeStore(configStore: InMemoryConfigStore(stored: config))
+
+        #expect(store.servers.map(\.name) == ["Saved"])
+        #expect(store.servers.first?.status == .disconnected)
+    }
+
+    @Test func addServerPersistsSelectsAndConnects() async throws {
+        let configStore = InMemoryConfigStore()
+        let store = makeStore(configStore: configStore)
+
+        store.addServer(name: "Echo", configuration: .init(stdio: "echo-server"))
+        let server = try #require(store.servers.first)
+
+        #expect(store.selection == .server(server))
+        #expect(configStore.savedConfigs.last?.servers.map(\.name) == ["Echo"])
+
+        try await eventually("server connects") {
+            store.server(id: server.id)?.status == .connected
+        }
+
+        let connected = try #require(store.server(id: server.id))
+        #expect(connected.availableTools.map(\.name) == ["echo"])
+        #expect(connected.serverInfo?.name == "Fake")
+        #expect(connected.isConnecting == false)
+    }
+
+    @Test func connectFailureSetsErrorStatus() async throws {
+        let connection = FakeServerConnection()
+        await connection.setConnectError(
+            NSError(
+                domain: "Fake", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "boom"]))
+        let store = makeStore(connection: connection)
+
+        store.addServer(name: "Bad", configuration: .init(stdio: "nope"))
+        let server = try #require(store.servers.first)
+
+        try await eventually("server reports error") {
+            store.server(id: server.id)?.errorMessage == "boom"
+        }
+
+        let failed = try #require(store.server(id: server.id))
+        #expect(failed.status == .error("boom"))
+        #expect(failed.isConnecting == false)
+    }
+
+    @Test func cancellingOneConnectDoesNotCancelAnother() async throws {
+        let connection = FakeServerConnection()
+        await connection.setConnectDelay(.seconds(1))
+        let store = makeStore(connection: connection)
+
+        store.addServer(name: "First", configuration: .init(stdio: "one"))
+        store.addServer(name: "Second", configuration: .init(stdio: "two"))
+        let first = try #require(store.servers.first { $0.name == "First" })
+        let second = try #require(store.servers.first { $0.name == "Second" })
+
+        store.cancelConnect(serverID: first.id)
+
+        try await eventually("first server is disconnected") {
+            let s = store.server(id: first.id)
+            return s?.status == .disconnected && s?.isConnecting == false
+        }
+        try await eventually("second server still connects") {
+            store.server(id: second.id)?.status == .connected
+        }
+    }
+
+    @Test func disconnectClearsRuntimeData() async throws {
+        let store = makeStore()
+
+        store.addServer(name: "Echo", configuration: .init(stdio: "echo-server"))
+        let server = try #require(store.servers.first)
+        try await eventually("server connects") {
+            store.server(id: server.id)?.status == .connected
+        }
+
+        store.disconnect(serverID: server.id)
+
+        let disconnected = try #require(store.server(id: server.id))
+        #expect(disconnected.status == .disconnected)
+        #expect(disconnected.availableTools.isEmpty)
+    }
+
+    @Test func removeServerPersistsAndClearsSelection() async throws {
+        let configStore = InMemoryConfigStore()
+        let store = makeStore(configStore: configStore)
+
+        store.addServer(name: "Echo", configuration: .init(stdio: "echo-server"))
+        let server = try #require(store.servers.first)
+
+        store.removeServer(id: server.id)
+
+        #expect(store.servers.isEmpty)
+        #expect(store.selection == nil)
+        #expect(configStore.savedConfigs.last?.entries.isEmpty == true)
+    }
+
+    @Test func refreshReplacesToolList() async throws {
+        let connection = FakeServerConnection()
+        let store = makeStore(connection: connection)
+
+        store.addServer(name: "Echo", configuration: .init(stdio: "echo-server"))
+        let server = try #require(store.servers.first)
+        try await eventually("server connects") {
+            store.server(id: server.id)?.status == .connected
+        }
+
+        await connection.setTools([
+            Tool(name: "shout", description: "Shout", inputSchema: .object([:]))
+        ])
+        store.refresh(serverID: server.id)
+
+        try await eventually("tool list refreshes") {
+            store.server(id: server.id)?.availableTools.map(\.name) == ["shout"]
+        }
+        #expect(store.server(id: server.id)?.isLoadingData == false)
+    }
+
+    @Test func updateWithChangedConfigurationReconnects() async throws {
+        let connection = FakeServerConnection()
+        let store = makeStore(connection: connection)
+
+        store.addServer(name: "Echo", configuration: .init(stdio: "old"))
+        let server = try #require(store.servers.first)
+        try await eventually("server connects") {
+            store.server(id: server.id)?.status == .connected
+        }
+
+        store.updateServer(
+            id: server.id, name: "Echo", configuration: .init(stdio: "new"))
+
+        let serverID = server.id
+        try await eventuallyAsync("server disconnects and reconnects") {
+            let disconnects = await connection.disconnectCalls
+            let connects = await connection.connectCalls
+            return disconnects == [serverID] && connects == [serverID, serverID]
+        }
+        try await eventually("server is connected with new configuration") {
+            let s = store.server(id: server.id)
+            return s?.status == .connected && s?.configuration.command == "new"
+        }
+    }
+}
