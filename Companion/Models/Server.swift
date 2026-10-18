@@ -19,12 +19,14 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
         struct SSEConfig: Hashable, Codable, Sendable {
             var type: String = "sse"
             var url: String
+            var headers: [String: String]?
             var note: String?
         }
 
         struct StreamableHTTPConfig: Hashable, Codable, Sendable {
             var type: String = "streamable-http"
             var url: String
+            var headers: [String: String]?
             var note: String?
         }
         
@@ -72,6 +74,24 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
                 return config.url
             }
         }
+
+        var headers: [String: String]? {
+            switch self {
+            case .stdio:
+                return nil
+            case .sse(let config):
+                return config.headers
+            case .streamableHTTP(let config):
+                return config.headers
+            }
+        }
+
+        var env: [String: String]? {
+            if case .stdio(let config) = self {
+                return config.env
+            }
+            return nil
+        }
     }
     var configuration: Configuration
     
@@ -113,6 +133,12 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
     var capabilities: MCP.Server.Capabilities?
     var instructions: String?
 
+    // Runtime state for logging and subscriptions (not persisted)
+    var logMessages: [ServerLogMessage] = []
+    var logLevel: MCP.LogLevel = .debug
+    var subscribedResourceURIs: Set<String> = []
+    var updatedResourceURIs: Set<String> = []
+
     init(id: String? = nil, name: String, configuration: Configuration) {
         self.id = id ?? "\(name)|\(configuration)".sha256Hash
         self.name = name
@@ -120,7 +146,75 @@ struct Server: Identifiable, Hashable, Equatable, Codable, Sendable {
     }
 }
 
+// MARK: - Log messages
+
+/// A log message received from a server through `notifications/message`.
+struct ServerLogMessage: Identifiable, Hashable, Codable, Sendable {
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var level: MCP.LogLevel
+    var logger: String?
+    var data: MCP.Value
+
+    /// A short text representation of the log data.
+    var text: String {
+        switch data {
+        case .string(let string):
+            return string
+        default:
+            guard let encoded = try? JSONEncoder().encode(data),
+                let string = String(data: encoded, encoding: .utf8)
+            else {
+                return "\(data)"
+            }
+            return string
+        }
+    }
+}
+
 // MARK: - Codable
+
+extension Server {
+    private enum CodingKeys: String, CodingKey {
+        case id, name, configuration, status
+        case isConnecting, isLoadingData, errorMessage
+        case availableTools, availablePrompts, availableResources, availableResourceTemplates
+        case serverInfo, protocolVersion, capabilities, instructions
+        case logMessages, logLevel, subscribedResourceURIs, updatedResourceURIs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        configuration = try container.decode(Configuration.self, forKey: .configuration)
+        status = try container.decodeIfPresent(Status.self, forKey: .status) ?? .disconnected
+        isConnecting = try container.decodeIfPresent(Bool.self, forKey: .isConnecting) ?? false
+        isLoadingData = try container.decodeIfPresent(Bool.self, forKey: .isLoadingData) ?? false
+        errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        availableTools =
+            try container.decodeIfPresent([MCP.Tool].self, forKey: .availableTools) ?? []
+        availablePrompts =
+            try container.decodeIfPresent([MCP.Prompt].self, forKey: .availablePrompts) ?? []
+        availableResources =
+            try container.decodeIfPresent([MCP.Resource].self, forKey: .availableResources) ?? []
+        availableResourceTemplates =
+            try container.decodeIfPresent(
+                [MCP.Resource.Template].self, forKey: .availableResourceTemplates) ?? []
+        serverInfo = try container.decodeIfPresent(MCP.Server.Info.self, forKey: .serverInfo)
+        protocolVersion = try container.decodeIfPresent(String.self, forKey: .protocolVersion)
+        capabilities = try container.decodeIfPresent(
+            MCP.Server.Capabilities.self, forKey: .capabilities)
+        instructions = try container.decodeIfPresent(String.self, forKey: .instructions)
+        logMessages =
+            try container.decodeIfPresent([ServerLogMessage].self, forKey: .logMessages) ?? []
+        logLevel = try container.decodeIfPresent(MCP.LogLevel.self, forKey: .logLevel) ?? .debug
+        subscribedResourceURIs =
+            try container.decodeIfPresent(Set<String>.self, forKey: .subscribedResourceURIs) ?? []
+        updatedResourceURIs =
+            try container.decodeIfPresent(Set<String>.self, forKey: .updatedResourceURIs) ?? []
+    }
+}
 
 extension Server.Configuration: Codable {
     init(from decoder: Decoder) throws {

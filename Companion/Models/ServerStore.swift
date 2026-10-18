@@ -32,19 +32,31 @@ final class ServerStore {
 
     private let connection: any ServerConnecting
     private let configStore: any ServerConfigStoring
+    private let settingsStore: ServerSettingsStore
+    private let keychain: KeychainStore
+
+    /// Queues sampling and elicitation requests from servers for the UI.
+    let featureCoordinator: ClientFeatureCoordinator
 
     /// One task per server, so cancelling one server's work
     /// does not affect any other server.
     private var connectTasks: [String: Task<Void, Never>] = [:]
     private var refreshTasks: [String: Task<Void, Never>] = [:]
-    private var pollingTasks: [String: Task<Void, Never>] = [:]
+    private var listRefreshTasks: [String: Task<Void, Never>] = [:]
 
     init(
-        connection: any ServerConnecting = MCPServerConnections(),
-        configStore: any ServerConfigStoring = FileServerConfigStore()
+        connection: (any ServerConnecting)? = nil,
+        configStore: any ServerConfigStoring = FileServerConfigStore(),
+        featureCoordinator: ClientFeatureCoordinator = ClientFeatureCoordinator(),
+        settingsStore: ServerSettingsStore = ServerSettingsStore(),
+        keychain: KeychainStore = KeychainStore()
     ) {
-        self.connection = connection
+        self.featureCoordinator = featureCoordinator
+        self.connection =
+            connection ?? MCPServerConnections(featureHandler: featureCoordinator)
         self.configStore = configStore
+        self.settingsStore = settingsStore
+        self.keychain = keychain
 
         do {
             servers = try configStore.load().servers
@@ -52,6 +64,16 @@ final class ServerStore {
             Logger.persistence.error(
                 "Failed to load servers: \(error.localizedDescription, privacy: .public)")
             servers = []
+        }
+
+        let liveConnection = self.connection
+        Task { [weak self] in
+            await liveConnection.setEventHandler { [weak self] event in
+                let store = self
+                Task { @MainActor in
+                    store?.handleServerEvent(event)
+                }
+            }
         }
     }
 
@@ -97,12 +119,26 @@ final class ServerStore {
 
     func updateServer(id: String, name: String, configuration: Server.Configuration) {
         guard let idx = index(of: id) else { return }
+        let oldName = servers[idx].name
         let configurationChanged = servers[idx].configuration != configuration
         let wasConnected = servers[idx].status.isConnected
 
         servers[idx].name = name
         servers[idx].configuration = configuration
         save()
+
+        if oldName != name {
+            settingsStore.rename(from: oldName, to: name)
+            keychain.rename(
+                from: KeychainStore.bearerTokenAccount(serverName: oldName),
+                to: KeychainStore.bearerTokenAccount(serverName: name))
+            keychain.rename(
+                from: KeychainStore.oauthClientSecretAccount(serverName: oldName),
+                to: KeychainStore.oauthClientSecretAccount(serverName: name))
+            keychain.rename(
+                from: KeychainStore.oauthTokenAccount(serverName: oldName),
+                to: KeychainStore.oauthTokenAccount(serverName: name))
+        }
 
         if configurationChanged {
             Task {
@@ -126,8 +162,19 @@ final class ServerStore {
         connectTasks[id] = nil
         refreshTasks[id]?.cancel()
         refreshTasks[id] = nil
-        pollingTasks[id]?.cancel()
-        pollingTasks[id] = nil
+        for key in listRefreshTasks.keys where key.hasPrefix("\(id):") {
+            listRefreshTasks[key]?.cancel()
+            listRefreshTasks[key] = nil
+        }
+
+        if let name = server(id: id)?.name {
+            featureCoordinator.cancelPendingRequests(serverName: name)
+            settingsStore.removeSettings(forServerNamed: name)
+            keychain.delete(account: KeychainStore.bearerTokenAccount(serverName: name))
+            keychain.delete(
+                account: KeychainStore.oauthClientSecretAccount(serverName: name))
+            keychain.delete(account: KeychainStore.oauthTokenAccount(serverName: name))
+        }
 
         if selection?.serverId == id {
             selection = nil
@@ -171,10 +218,6 @@ final class ServerStore {
                 servers[i].instructions = result.instructions
                 servers[i].errorMessage = nil
                 finishConnect(serverID: serverID)
-
-                if result.capabilities.tools?.listChanged == true {
-                    startToolPolling(serverID: serverID)
-                }
             } catch is CancellationError {
                 if let i = index(of: serverID) {
                     servers[i].status = .disconnected
@@ -207,8 +250,14 @@ final class ServerStore {
         connectTasks[serverID] = nil
         refreshTasks[serverID]?.cancel()
         refreshTasks[serverID] = nil
-        pollingTasks[serverID]?.cancel()
-        pollingTasks[serverID] = nil
+        for key in listRefreshTasks.keys where key.hasPrefix("\(serverID):") {
+            listRefreshTasks[key]?.cancel()
+            listRefreshTasks[key] = nil
+        }
+
+        if let name = server(id: serverID)?.name {
+            featureCoordinator.cancelPendingRequests(serverName: name)
+        }
 
         if let i = index(of: serverID) {
             servers[i].isConnecting = false
@@ -218,6 +267,8 @@ final class ServerStore {
             servers[i].availablePrompts = []
             servers[i].availableResources = []
             servers[i].availableResourceTemplates = []
+            servers[i].subscribedResourceURIs = []
+            servers[i].updatedResourceURIs = []
             servers[i].errorMessage = nil
         }
 
@@ -273,22 +324,128 @@ final class ServerStore {
         }
     }
 
-    private func startToolPolling(serverID: String) {
-        pollingTasks[serverID]?.cancel()
-        pollingTasks[serverID] = Task { [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(30))
-                    guard let self, !Task.isCancelled else { return }
-                    let tools = try await connection.listTools(serverID: serverID)
-                    if let i = index(of: serverID), servers[i].availableTools != tools {
-                        servers[i].availableTools = tools
-                    }
-                } catch is CancellationError {
-                    return
-                } catch {
-                    try? await Task.sleep(for: .seconds(60))
+    // MARK: - Server events
+
+    private func handleServerEvent(_ event: ServerEvent) {
+        switch event {
+        case .toolsListChanged(let serverID):
+            refreshList(serverID: serverID, kind: "tools") { connection in
+                try await connection.listTools(serverID: serverID)
+            } apply: { server, tools in
+                server.availableTools = tools
+            }
+        case .promptsListChanged(let serverID):
+            refreshList(serverID: serverID, kind: "prompts") { connection in
+                try await connection.listPrompts(serverID: serverID)
+            } apply: { server, prompts in
+                server.availablePrompts = prompts
+            }
+        case .resourcesListChanged(let serverID):
+            refreshList(serverID: serverID, kind: "resources") { connection in
+                async let resources = connection.listResources(serverID: serverID)
+                async let templates = connection.listResourceTemplates(serverID: serverID)
+                return try await (resources, templates)
+            } apply: { server, lists in
+                server.availableResources = lists.0
+                server.availableResourceTemplates = lists.1
+            }
+        case .resourceUpdated(let serverID, let uri):
+            if let i = index(of: serverID) {
+                servers[i].updatedResourceURIs.insert(uri)
+            }
+        case .logMessage(let serverID, let message):
+            if let i = index(of: serverID) {
+                servers[i].logMessages.append(message)
+                if servers[i].logMessages.count > 500 {
+                    servers[i].logMessages.removeFirst(
+                        servers[i].logMessages.count - 500)
                 }
+            }
+        case .elicitationCompleted(let serverID, let elicitationId):
+            Logger.server.info(
+                "Elicitation \(elicitationId, privacy: .public) completed for server \(serverID, privacy: .public)"
+            )
+            if let i = index(of: serverID) {
+                servers[i].logMessages.append(
+                    ServerLogMessage(
+                        level: .info,
+                        logger: "Companion",
+                        data: .string("Elicitation completed: \(elicitationId)")
+                    ))
+            }
+        }
+    }
+
+    private func refreshList<Item>(
+        serverID: String,
+        kind: String,
+        fetch: @escaping @Sendable (any ServerConnecting) async throws -> Item,
+        apply: @escaping (inout Server, Item) -> Void
+    ) {
+        let key = "\(serverID):\(kind)"
+        guard listRefreshTasks[key] == nil else { return }
+        let connection = self.connection
+        listRefreshTasks[key] = Task { [weak self] in
+            defer { self?.listRefreshTasks[key] = nil }
+            do {
+                let item = try await fetch(connection)
+                guard let self, let i = index(of: serverID) else { return }
+                apply(&servers[i], item)
+            } catch {
+                Logger.server.error(
+                    "Failed to refresh \(kind, privacy: .public) after list-changed notification: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
+    }
+
+    // MARK: - Sidecar settings and secrets
+
+    func sidecarSettings(forServerNamed name: String) -> ServerSidecarSettings {
+        settingsStore.settings(forServerNamed: name)
+    }
+
+    func bearerToken(forServerNamed name: String) -> String? {
+        keychain.string(for: KeychainStore.bearerTokenAccount(serverName: name))
+    }
+
+    func oauthClientSecret(forServerNamed name: String) -> String? {
+        keychain.string(for: KeychainStore.oauthClientSecretAccount(serverName: name))
+    }
+
+    /// Saves roots, OAuth preferences, and secrets for a server.
+    ///
+    /// The add and edit sheets call this before `addServer` or
+    /// `updateServer`, so the connection reads the new values
+    /// when it starts. Changes that affect the transport
+    /// (OAuth and bearer token) restart a connected server.
+    /// Root changes notify the server without a restart.
+    func saveSidecarSettings(
+        _ settings: ServerSidecarSettings,
+        bearerToken: String?,
+        oauthClientSecret: String?,
+        forServerNamed name: String
+    ) {
+        let oldSettings = settingsStore.settings(forServerNamed: name)
+        let oldBearerToken = self.bearerToken(forServerNamed: name)
+
+        settingsStore.save(settings, forServerNamed: name)
+        keychain.setString(
+            bearerToken, for: KeychainStore.bearerTokenAccount(serverName: name))
+        keychain.setString(
+            oauthClientSecret,
+            for: KeychainStore.oauthClientSecretAccount(serverName: name))
+
+        guard let server = servers.first(where: { $0.name == name }),
+            server.status.isConnected
+        else { return }
+
+        if oldSettings.useOAuth != settings.useOAuth || oldBearerToken != bearerToken {
+            restart(serverID: server.id)
+        } else if oldSettings.roots != settings.roots {
+            let serverID = server.id
+            Task {
+                await connection.notifyRootsChanged(serverID: serverID)
             }
         }
     }
@@ -299,10 +456,19 @@ final class ServerStore {
         try await connection.testConnection(server)
     }
 
-    func callTool(serverID: String, name: String, arguments: [String: Value]) async throws
-        -> MCP.CallTool.Result
-    {
-        try await connection.callTool(serverID: serverID, name: name, arguments: arguments)
+    func ping(serverID: String) async throws {
+        try await connection.ping(serverID: serverID)
+    }
+
+    func callTool(
+        serverID: String,
+        name: String,
+        arguments: [String: Value],
+        progressHandler: (@Sendable (ToolProgress) -> Void)? = nil
+    ) async throws -> MCP.CallTool.Result {
+        try await connection.callTool(
+            serverID: serverID, name: name, arguments: arguments,
+            progressHandler: progressHandler)
     }
 
     func getPrompt(serverID: String, name: String, arguments: [String: String]) async throws
@@ -312,7 +478,56 @@ final class ServerStore {
     }
 
     func readResource(serverID: String, uri: String) async throws -> MCP.ReadResource.Result {
-        try await connection.readResource(serverID: serverID, uri: uri)
+        if let i = index(of: serverID) {
+            servers[i].updatedResourceURIs.remove(uri)
+        }
+        return try await connection.readResource(serverID: serverID, uri: uri)
+    }
+
+    func setLoggingLevel(serverID: String, level: MCP.LogLevel) async throws {
+        try await connection.setLoggingLevel(serverID: serverID, level: level)
+        if let i = index(of: serverID) {
+            servers[i].logLevel = level
+        }
+    }
+
+    func clearLogMessages(serverID: String) {
+        if let i = index(of: serverID) {
+            servers[i].logMessages = []
+        }
+    }
+
+    func completePromptArgument(
+        serverID: String, promptName: String, argumentName: String,
+        argumentValue: String, context: [String: String]? = nil
+    ) async throws -> MCP.Complete.Result.Completion {
+        try await connection.completePromptArgument(
+            serverID: serverID, promptName: promptName, argumentName: argumentName,
+            argumentValue: argumentValue, context: context)
+    }
+
+    func completeResourceArgument(
+        serverID: String, resourceURI: String, argumentName: String,
+        argumentValue: String, context: [String: String]? = nil
+    ) async throws -> MCP.Complete.Result.Completion {
+        try await connection.completeResourceArgument(
+            serverID: serverID, resourceURI: resourceURI, argumentName: argumentName,
+            argumentValue: argumentValue, context: context)
+    }
+
+    func subscribeToResource(serverID: String, uri: String) async throws {
+        try await connection.subscribeToResource(serverID: serverID, uri: uri)
+        if let i = index(of: serverID) {
+            servers[i].subscribedResourceURIs.insert(uri)
+        }
+    }
+
+    func unsubscribeFromResource(serverID: String, uri: String) async throws {
+        try await connection.unsubscribeFromResource(serverID: serverID, uri: uri)
+        if let i = index(of: serverID) {
+            servers[i].subscribedResourceURIs.remove(uri)
+            servers[i].updatedResourceURIs.remove(uri)
+        }
     }
 
     // MARK: - Persistence

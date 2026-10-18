@@ -21,6 +21,33 @@ struct ServerConnectionResult: Sendable {
     var resourceTemplates: [MCP.Resource.Template]
 }
 
+// MARK: - Server events
+
+/// Notifications a connected server sends to the client.
+///
+/// `ServerStore` handles these to refresh lists,
+/// append log messages, and mark resources as updated.
+enum ServerEvent: Sendable {
+    case toolsListChanged(serverID: String)
+    case promptsListChanged(serverID: String)
+    case resourcesListChanged(serverID: String)
+    case resourceUpdated(serverID: String, uri: String)
+    case logMessage(serverID: String, message: ServerLogMessage)
+    case elicitationCompleted(serverID: String, elicitationId: String)
+}
+
+/// Progress for a long-running tool call.
+struct ToolProgress: Sendable {
+    var progress: Double
+    var total: Double?
+    var message: String?
+
+    var fraction: Double? {
+        guard let total, total > 0 else { return nil }
+        return min(max(progress / total, 0), 1)
+    }
+}
+
 // MARK: - Connection protocol
 
 /// Owns live MCP connections, keyed by server ID.
@@ -30,20 +57,40 @@ struct ServerConnectionResult: Sendable {
 /// it asks the connection type to connect, disconnect, and call.
 /// Tests can substitute a fake that conforms to this protocol.
 protocol ServerConnecting: Sendable {
+    func setEventHandler(_ handler: (@Sendable (ServerEvent) -> Void)?) async
+
     func connect(_ server: Server) async throws -> ServerConnectionResult
     func disconnect(serverID: String) async
     func testConnection(_ server: Server) async throws
+    func ping(serverID: String) async throws
 
     func listTools(serverID: String) async throws -> [MCP.Tool]
     func listPrompts(serverID: String) async throws -> [MCP.Prompt]
     func listResources(serverID: String) async throws -> [MCP.Resource]
     func listResourceTemplates(serverID: String) async throws -> [MCP.Resource.Template]
 
-    func callTool(serverID: String, name: String, arguments: [String: Value]) async throws
-        -> MCP.CallTool.Result
+    func callTool(
+        serverID: String,
+        name: String,
+        arguments: [String: Value],
+        progressHandler: (@Sendable (ToolProgress) -> Void)?
+    ) async throws -> MCP.CallTool.Result
     func getPrompt(serverID: String, name: String, arguments: [String: String]) async throws
         -> MCP.GetPrompt.Result
     func readResource(serverID: String, uri: String) async throws -> MCP.ReadResource.Result
+
+    func setLoggingLevel(serverID: String, level: MCP.LogLevel) async throws
+    func completePromptArgument(
+        serverID: String, promptName: String, argumentName: String,
+        argumentValue: String, context: [String: String]?
+    ) async throws -> MCP.Complete.Result.Completion
+    func completeResourceArgument(
+        serverID: String, resourceURI: String, argumentName: String,
+        argumentValue: String, context: [String: String]?
+    ) async throws -> MCP.Complete.Result.Completion
+    func subscribeToResource(serverID: String, uri: String) async throws
+    func unsubscribeFromResource(serverID: String, uri: String) async throws
+    func notifyRootsChanged(serverID: String) async
 }
 
 // MARK: - Live implementation
@@ -59,6 +106,7 @@ actor MCPServerConnections: ServerConnecting {
         var prompts: [MCP.Prompt] = []
         var resources: [MCP.Resource] = []
         var resourceTemplates: [MCP.Resource.Template] = []
+        var progressHandlers: [MCP.ProgressToken: @Sendable (ToolProgress) -> Void] = [:]
         var isConnected = false
 
         init(client: MCP.Client, transport: any MCP.Transport) {
@@ -68,6 +116,29 @@ actor MCPServerConnections: ServerConnecting {
     }
 
     private var connections: [String: LiveConnection] = [:]
+    private var eventHandler: (@Sendable (ServerEvent) -> Void)?
+
+    private let featureHandler: (any ClientFeatureHandling)?
+    private let keychain: KeychainStore
+    private let settingsStore: ServerSettingsStore
+
+    init(
+        featureHandler: (any ClientFeatureHandling)? = nil,
+        keychain: KeychainStore = KeychainStore(),
+        settingsStore: ServerSettingsStore = ServerSettingsStore()
+    ) {
+        self.featureHandler = featureHandler
+        self.keychain = keychain
+        self.settingsStore = settingsStore
+    }
+
+    func setEventHandler(_ handler: (@Sendable (ServerEvent) -> Void)?) {
+        eventHandler = handler
+    }
+
+    private func emit(_ event: ServerEvent) {
+        eventHandler?(event)
+    }
 
     func connect(_ server: Server) async throws -> ServerConnectionResult {
         let (connection, result) = try await performConnection(server)
@@ -97,46 +168,71 @@ actor MCPServerConnections: ServerConnecting {
         await tearDown(connection)
     }
 
+    func ping(serverID: String) async throws {
+        let connection = try liveConnection(serverID)
+        try await connection.client.ping()
+    }
+
     func listTools(serverID: String) async throws -> [MCP.Tool] {
         let connection = try liveConnection(serverID)
-        let (tools, _) = try await connection.client.listTools()
+        let tools = try await fetchAllTools(connection.client)
         connection.tools = tools
         return tools
     }
 
     func listPrompts(serverID: String) async throws -> [MCP.Prompt] {
         let connection = try liveConnection(serverID)
-        let (prompts, _) = try await connection.client.listPrompts()
+        let prompts = try await fetchAllPrompts(connection.client)
         connection.prompts = prompts
         return prompts
     }
 
     func listResources(serverID: String) async throws -> [MCP.Resource] {
         let connection = try liveConnection(serverID)
-        let (resources, _) = try await connection.client.listResources()
+        let resources = try await fetchAllResources(connection.client)
         connection.resources = resources
         return resources
     }
 
     func listResourceTemplates(serverID: String) async throws -> [MCP.Resource.Template] {
         let connection = try liveConnection(serverID)
-        let (templates, _) = try await connection.client.listResourceTemplates()
+        let templates = try await fetchAllResourceTemplates(connection.client)
         connection.resourceTemplates = templates
         return templates
     }
 
-    func callTool(serverID: String, name: String, arguments: [String: Value]) async throws
-        -> MCP.CallTool.Result
-    {
+    func callTool(
+        serverID: String,
+        name: String,
+        arguments: [String: Value],
+        progressHandler: (@Sendable (ToolProgress) -> Void)?
+    ) async throws -> MCP.CallTool.Result {
         let connection = try liveConnection(serverID)
         guard connection.tools.contains(where: { $0.name == name }) else {
             throw ServerConnectionError.toolNotFound(name)
         }
-        let (content, isError) = try await connection.client.callTool(
+
+        let token = MCP.ProgressToken.unique()
+        if let progressHandler {
+            connection.progressHandlers[token] = progressHandler
+        }
+        defer { connection.progressHandlers[token] = nil }
+
+        let client = connection.client
+        let context: MCP.RequestContext<MCP.CallTool.Result> = try await client.callTool(
             name: name,
-            arguments: arguments
+            arguments: arguments,
+            meta: MCP.Metadata(progressToken: token)
         )
-        return MCP.CallTool.Result(content: content, isError: isError)
+
+        return try await withTaskCancellationHandler {
+            try await context.value
+        } onCancel: {
+            let requestID = context.requestID
+            Task {
+                try? await client.cancelRequest(requestID, reason: "Cancelled by user")
+            }
+        }
     }
 
     func getPrompt(serverID: String, name: String, arguments: [String: String]) async throws
@@ -159,6 +255,60 @@ actor MCPServerConnections: ServerConnecting {
         return MCP.ReadResource.Result(contents: contents)
     }
 
+    func setLoggingLevel(serverID: String, level: MCP.LogLevel) async throws {
+        let connection = try liveConnection(serverID)
+        try await connection.client.setLoggingLevel(level)
+    }
+
+    func completePromptArgument(
+        serverID: String, promptName: String, argumentName: String,
+        argumentValue: String, context: [String: String]?
+    ) async throws -> MCP.Complete.Result.Completion {
+        let connection = try liveConnection(serverID)
+        return try await connection.client.complete(
+            promptName: promptName,
+            argumentName: argumentName,
+            argumentValue: argumentValue,
+            context: context
+        )
+    }
+
+    func completeResourceArgument(
+        serverID: String, resourceURI: String, argumentName: String,
+        argumentValue: String, context: [String: String]?
+    ) async throws -> MCP.Complete.Result.Completion {
+        let connection = try liveConnection(serverID)
+        return try await connection.client.complete(
+            resourceURI: resourceURI,
+            argumentName: argumentName,
+            argumentValue: argumentValue,
+            context: context
+        )
+    }
+
+    func subscribeToResource(serverID: String, uri: String) async throws {
+        let connection = try liveConnection(serverID)
+        try await connection.client.subscribeToResource(uri: uri)
+    }
+
+    func unsubscribeFromResource(serverID: String, uri: String) async throws {
+        let connection = try liveConnection(serverID)
+        // The SDK has no unsubscribe helper and the parameters type has no
+        // public initializer, so Companion builds it by decoding JSON
+        // and sends the request through the generic `send` API.
+        let data = try JSONEncoder().encode(["uri": uri])
+        let parameters = try JSONDecoder().decode(
+            MCP.ResourceUnsubscribe.Parameters.self, from: data)
+        let context = try await connection.client.send(
+            MCP.ResourceUnsubscribe.request(parameters))
+        _ = try await context.value
+    }
+
+    func notifyRootsChanged(serverID: String) async {
+        guard let connection = connections[serverID], connection.isConnected else { return }
+        try? await connection.client.notifyRootsChanged()
+    }
+
     // MARK: Private
 
     private func liveConnection(_ serverID: String) throws -> LiveConnection {
@@ -179,6 +329,131 @@ actor MCPServerConnections: ServerConnecting {
         #endif
     }
 
+    private func forwardProgress(serverID: String, parameters: MCP.ProgressNotification.Parameters) {
+        guard let connection = connections[serverID],
+            let handler = connection.progressHandlers[parameters.progressToken]
+        else { return }
+        handler(
+            ToolProgress(
+                progress: parameters.progress,
+                total: parameters.total,
+                message: parameters.message
+            ))
+    }
+
+    // MARK: Pagination
+
+    private func fetchAllTools(_ client: MCP.Client) async throws -> [MCP.Tool] {
+        try await fetchAllPages { cursor in
+            let (tools, nextCursor) = try await client.listTools(cursor: cursor)
+            return (tools, nextCursor)
+        }
+    }
+
+    private func fetchAllPrompts(_ client: MCP.Client) async throws -> [MCP.Prompt] {
+        try await fetchAllPages { cursor in
+            let (prompts, nextCursor) = try await client.listPrompts(cursor: cursor)
+            return (prompts, nextCursor)
+        }
+    }
+
+    private func fetchAllResources(_ client: MCP.Client) async throws -> [MCP.Resource] {
+        try await fetchAllPages { cursor in
+            let (resources, nextCursor) = try await client.listResources(cursor: cursor)
+            return (resources, nextCursor)
+        }
+    }
+
+    private func fetchAllResourceTemplates(_ client: MCP.Client) async throws
+        -> [MCP.Resource.Template]
+    {
+        try await fetchAllPages { cursor in
+            let (templates, nextCursor) = try await client.listResourceTemplates(cursor: cursor)
+            return (templates, nextCursor)
+        }
+    }
+
+    /// Follows `nextCursor` until the server stops sending one.
+    /// The page cap and repeated-cursor check protect against
+    /// servers that loop forever.
+    private func fetchAllPages<Item: Sendable>(
+        _ fetchPage: (String?) async throws -> (items: [Item], nextCursor: String?)
+    ) async throws -> [Item] {
+        var all: [Item] = []
+        var cursor: String?
+        var seenCursors: Set<String> = []
+        var pages = 0
+
+        repeat {
+            let (items, nextCursor) = try await fetchPage(cursor)
+            all += items
+            pages += 1
+
+            guard let nextCursor, pages < 100, !seenCursors.contains(nextCursor) else {
+                break
+            }
+            seenCursors.insert(nextCursor)
+            cursor = nextCursor
+        } while cursor != nil
+
+        return all
+    }
+
+    // MARK: Connection setup
+
+    /// Registers handlers for server notifications and,
+    /// when a feature handler exists, for roots, sampling,
+    /// and elicitation requests from the server.
+    private func registerHandlers(client: MCP.Client, server: Server) async {
+        let serverID = server.id
+        let serverName = server.name
+
+        if let featureHandler {
+            await client.withRootsHandler {
+                await featureHandler.roots(forServerNamed: serverName)
+            }
+            await client.withSamplingHandler { parameters in
+                try await featureHandler.handleSampling(
+                    serverName: serverName, parameters: parameters)
+            }
+            await client.withElicitationHandler { parameters in
+                try await featureHandler.handleElicitation(
+                    serverName: serverName, parameters: parameters)
+            }
+        }
+
+        await client.onNotification(MCP.ToolListChangedNotification.self) { [weak self] _ in
+            await self?.emit(.toolsListChanged(serverID: serverID))
+        }
+        await client.onNotification(MCP.PromptListChangedNotification.self) { [weak self] _ in
+            await self?.emit(.promptsListChanged(serverID: serverID))
+        }
+        await client.onNotification(MCP.ResourceListChangedNotification.self) { [weak self] _ in
+            await self?.emit(.resourcesListChanged(serverID: serverID))
+        }
+        await client.onNotification(MCP.ResourceUpdatedNotification.self) { [weak self] message in
+            await self?.emit(
+                .resourceUpdated(serverID: serverID, uri: message.params.uri))
+        }
+        await client.onNotification(MCP.LogMessageNotification.self) { [weak self] message in
+            let logMessage = ServerLogMessage(
+                level: message.params.level,
+                logger: message.params.logger,
+                data: message.params.data
+            )
+            await self?.emit(.logMessage(serverID: serverID, message: logMessage))
+        }
+        await client.onNotification(MCP.ProgressNotification.self) { [weak self] message in
+            await self?.forwardProgress(serverID: serverID, parameters: message.params)
+        }
+        await client.onNotification(MCP.ElicitationCompleteNotification.self) {
+            [weak self] message in
+            await self?.emit(
+                .elicitationCompleted(
+                    serverID: serverID, elicitationId: message.params.elicitationId))
+        }
+    }
+
     /// Creates a client and transport for the server configuration,
     /// performs the MCP handshake, and fetches the initial lists.
     /// A failure to fetch one list does not fail the connection.
@@ -190,7 +465,25 @@ actor MCPServerConnections: ServerConnecting {
         let name = Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "Companion"
         let version =
             Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        let client = MCP.Client(name: name, version: version)
+
+        let capabilities: MCP.Client.Capabilities =
+            featureHandler == nil
+            ? MCP.Client.Capabilities()
+            : MCP.Client.Capabilities(
+                sampling: MCP.Client.Capabilities.Sampling(),
+                elicitation: MCP.Client.Capabilities.Elicitation(
+                    form: MCP.Client.Capabilities.Elicitation.Form(),
+                    url: MCP.Client.Capabilities.Elicitation.URL()
+                ),
+                roots: MCP.Client.Capabilities.Roots(listChanged: true)
+            )
+        let client = MCP.Client(
+            name: name,
+            version: version,
+            title: "Companion",
+            description: "A utility for testing and debugging MCP servers",
+            capabilities: capabilities
+        )
 
         let transport: any MCP.Transport
         let connection: LiveConnection
@@ -224,9 +517,7 @@ actor MCPServerConnections: ServerConnecting {
                     "\(homePath)/.bun/bin",
                 ].joined(separator: ":")
 
-                if case .stdio(let stdioConfig) = server.configuration,
-                    let customEnv = stdioConfig.env
-                {
+                if let customEnv = server.configuration.env {
                     for (key, value) in customEnv {
                         env[key] = value
                     }
@@ -272,9 +563,34 @@ actor MCPServerConnections: ServerConnecting {
             #if !os(macOS)
                 config.multipathServiceType = .none
             #endif
-            transport = HTTPClientTransport(endpoint: url, configuration: config)
+
+            let headers = server.configuration.headers ?? [:]
+            let bearerToken = keychain.string(
+                for: KeychainStore.bearerTokenAccount(serverName: server.name))
+            let authorizer = oauthAuthorizer(for: server)
+
+            transport = HTTPClientTransport(
+                endpoint: url,
+                configuration: config,
+                authorizer: authorizer,
+                requestModifier: { request in
+                    var modified = request
+                    for (field, value) in headers {
+                        modified.setValue(value, forHTTPHeaderField: field)
+                    }
+                    if let bearerToken,
+                        modified.value(forHTTPHeaderField: "Authorization") == nil
+                    {
+                        modified.setValue(
+                            "Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+                    }
+                    return modified
+                }
+            )
             connection = LiveConnection(client: client, transport: transport)
         }
+
+        await registerHandlers(client: client, server: server)
 
         do {
             let initResult = try await client.connect(transport: transport)
@@ -291,9 +607,13 @@ actor MCPServerConnections: ServerConnecting {
                 resourceTemplates: []
             )
 
+            if initResult.capabilities.logging != nil {
+                try? await client.setLoggingLevel(.debug)
+            }
+
             if initResult.capabilities.tools != nil {
                 do {
-                    let (tools, _) = try await client.listTools()
+                    let tools = try await fetchAllTools(client)
                     result.tools = tools
                     connection.tools = tools
                 } catch {
@@ -304,7 +624,7 @@ actor MCPServerConnections: ServerConnecting {
 
             if initResult.capabilities.prompts != nil {
                 do {
-                    let (prompts, _) = try await client.listPrompts()
+                    let prompts = try await fetchAllPrompts(client)
                     result.prompts = prompts
                     connection.prompts = prompts
                 } catch {
@@ -315,7 +635,7 @@ actor MCPServerConnections: ServerConnecting {
 
             if initResult.capabilities.resources != nil {
                 do {
-                    let (resources, _) = try await client.listResources()
+                    let resources = try await fetchAllResources(client)
                     result.resources = resources
                     connection.resources = resources
                 } catch {
@@ -324,7 +644,7 @@ actor MCPServerConnections: ServerConnecting {
                 }
 
                 do {
-                    let (templates, _) = try await client.listResourceTemplates()
+                    let templates = try await fetchAllResourceTemplates(client)
                     result.resourceTemplates = templates
                     connection.resourceTemplates = templates
                 } catch {
@@ -345,6 +665,39 @@ actor MCPServerConnections: ServerConnecting {
             await tearDown(connection)
             throw error
         }
+    }
+
+    /// Builds an OAuth authorizer when the server settings enable OAuth.
+    /// With no saved client secret, the SDK registers the client
+    /// dynamically when the authorization server supports it.
+    private func oauthAuthorizer(for server: Server) -> (any HTTPClientAuthorizer)? {
+        let settings = settingsStore.settings(forServerNamed: server.name)
+        guard settings.useOAuth else { return nil }
+
+        let tokenStorage = KeychainTokenStorage(keychain: keychain, serverName: server.name)
+        let clientID =
+            settings.oauthClientID
+            ?? tokenStorage.load()?.clientID
+            ?? ""
+        let clientSecret = keychain.string(
+            for: KeychainStore.oauthClientSecretAccount(serverName: server.name))
+
+        let authentication: OAuthConfiguration.TokenEndpointAuthentication
+        if let clientSecret, !clientSecret.isEmpty {
+            authentication = .clientSecretBasic(
+                clientID: clientID, clientSecret: clientSecret)
+        } else {
+            authentication = .none(clientID: clientID)
+        }
+
+        let configuration = OAuthConfiguration(
+            grantType: .authorizationCode,
+            authentication: authentication,
+            authorizationRedirectURI: OAuthBrowserPresenter.redirectURI,
+            clientName: "Companion",
+            authorizationDelegate: OAuthBrowserPresenter()
+        )
+        return OAuthAuthorizer(configuration: configuration, tokenStorage: tokenStorage)
     }
 }
 

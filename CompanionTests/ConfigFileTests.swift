@@ -14,11 +14,13 @@ struct ConfigFileTests {
             },
             "Legacy SSE": {
               "type": "sse",
-              "url": "https://example.com/sse"
+              "url": "https://example.com/sse",
+              "headers": { "X-Api-Key": "secret" }
             },
             "Remote": {
               "type": "streamable-http",
-              "url": "https://example.com/mcp"
+              "url": "https://example.com/mcp",
+              "headers": { "Authorization": "Bearer [REDACTED]" }
             }
           }
         }
@@ -41,9 +43,36 @@ struct ConfigFileTests {
 
         let sse = try #require(servers.first { $0.name == "Legacy SSE" })
         #expect(sse.configuration.url == "https://example.com/sse")
+        #expect(sse.configuration.headers == ["X-Api-Key": "secret"])
 
         let remote = try #require(servers.first { $0.name == "Remote" })
         #expect(remote.configuration.url == "https://example.com/mcp")
+        #expect(remote.configuration.headers == ["Authorization": "Bearer [REDACTED]"])
+        #expect(everything.configuration.env == ["DEBUG": "1"])
+    }
+
+    @Test func headersAndEnvRoundTrip() throws {
+        let servers = [
+            Server(
+                name: "Local",
+                configuration: .stdio(
+                    .init(command: "node", args: ["srv.js"], env: ["A": "1"]))),
+            Server(
+                name: "Remote",
+                configuration: .streamableHTTP(
+                    .init(
+                        url: "https://example.com/mcp",
+                        headers: ["Authorization": "Bearer [REDACTED]"]))),
+        ]
+        let config = ConfigFile(servers: servers)
+
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(ConfigFile.self, from: data)
+
+        let local = try #require(decoded.servers.first { $0.name == "Local" })
+        #expect(local.configuration.env == ["A": "1"])
+        let remote = try #require(decoded.servers.first { $0.name == "Remote" })
+        #expect(remote.configuration.headers == ["Authorization": "Bearer [REDACTED]"])
     }
 
     @Test func serverIDsAreStableAcrossDecodes() throws {
