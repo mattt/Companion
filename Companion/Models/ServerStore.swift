@@ -216,6 +216,7 @@ final class ServerStore {
                 servers[i].protocolVersion = result.protocolVersion
                 servers[i].capabilities = result.capabilities
                 servers[i].instructions = result.instructions
+                servers[i].logLevel = AppSettings.defaultLogLevel()
                 servers[i].errorMessage = nil
                 finishConnect(serverID: serverID)
             } catch is CancellationError {
@@ -274,6 +275,30 @@ final class ServerStore {
 
         Task {
             await connection.disconnect(serverID: serverID)
+        }
+    }
+
+    /// Connects every server that is not already connected or connecting.
+    func connectAllServers() {
+        for server in servers where !server.status.isConnected && !server.isConnecting {
+            connect(serverID: server.id)
+        }
+    }
+
+    /// Deletes every saved secret: sampling API keys,
+    /// bearer tokens, and OAuth client secrets and tokens.
+    func clearAllSecrets() {
+        for provider in SamplingProvider.allCases where provider.needsAPIKey {
+            keychain.delete(
+                account: KeychainStore.apiKeyAccount(provider: provider.rawValue))
+        }
+        for server in servers {
+            keychain.delete(
+                account: KeychainStore.bearerTokenAccount(serverName: server.name))
+            keychain.delete(
+                account: KeychainStore.oauthClientSecretAccount(serverName: server.name))
+            keychain.delete(
+                account: KeychainStore.oauthTokenAccount(serverName: server.name))
         }
     }
 

@@ -148,6 +148,33 @@ final class ClientFeatureCoordinator {
         pendingSamplingRequests.removeAll { $0.id == request.id }
     }
 
+    /// Declines the request if the user does not answer in time.
+    fileprivate func scheduleSamplingTimeout(for request: PendingSamplingRequest) {
+        guard let timeout = AppSettings.requestTimeout() else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self,
+                pendingSamplingRequests.contains(where: { $0.id == request.id })
+            else { return }
+            declineSampling(request)
+        }
+    }
+
+    /// Cancels the request if the user does not answer in time.
+    fileprivate func scheduleElicitationTimeout(
+        for request: PendingElicitationRequest
+    ) {
+        guard let timeout = AppSettings.requestTimeout() else { return }
+        Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self,
+                pendingElicitationRequests.contains(where: { $0.id == request.id })
+            else { return }
+            completeElicitation(
+                request, result: MCP.CreateElicitation.Result(action: .cancel))
+        }
+    }
+
     func declineSampling(_ request: PendingSamplingRequest) {
         request.resume(throwing: ClientFeatureError.userDeclined("sampling"))
         pendingSamplingRequests.removeAll { $0.id == request.id }
@@ -209,6 +236,7 @@ extension ClientFeatureCoordinator: ClientFeatureHandling {
                     continuation: continuation
                 )
                 pendingSamplingRequests.append(request)
+                scheduleSamplingTimeout(for: request)
             }
         }
     }
@@ -228,6 +256,7 @@ extension ClientFeatureCoordinator: ClientFeatureHandling {
                     continuation: continuation
                 )
                 pendingElicitationRequests.append(request)
+                scheduleElicitationTimeout(for: request)
             }
         }
     }

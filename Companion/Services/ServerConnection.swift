@@ -608,7 +608,7 @@ actor MCPServerConnections: ServerConnecting {
             )
 
             if initResult.capabilities.logging != nil {
-                try? await client.setLoggingLevel(.debug)
+                try? await client.setLoggingLevel(AppSettings.defaultLogLevel())
             }
 
             if initResult.capabilities.tools != nil {

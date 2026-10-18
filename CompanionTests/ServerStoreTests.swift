@@ -474,6 +474,29 @@ struct ServerStoreTests {
         #expect(completion.values == ["alpha", "alpine"])
     }
 
+    @Test func connectAllServersConnectsDisconnectedServers() async throws {
+        let connection = FakeServerConnection()
+        let config = InMemoryConfigStore(
+            stored: ConfigFile(
+                servers: [
+                    Server(name: "One", configuration: .init(stdio: "one")),
+                    Server(name: "Two", configuration: .init(stdio: "two")),
+                ]))
+        let store = ServerStore(connection: connection, configStore: config)
+
+        store.connectAllServers()
+
+        try await eventually("both servers connect") {
+            store.servers.allSatisfy { $0.status == .connected }
+        }
+        #expect(await connection.connectCalls.count == 2)
+
+        // A second call does not reconnect healthy servers.
+        store.connectAllServers()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await connection.connectCalls.count == 2)
+    }
+
     @Test func callToolReturnsStructuredContent() async throws {
         let connection = FakeServerConnection()
         let (store, serverID) = try await connectedStore(connection: connection)

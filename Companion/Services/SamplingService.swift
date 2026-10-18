@@ -32,10 +32,10 @@ enum SamplingProvider: String, CaseIterable, Identifiable, Sendable {
     var defaultModel: String {
         switch self {
         case .system: return "system"
-        case .openAI: return "gpt-4o-mini"
-        case .anthropic: return "claude-sonnet-4-5"
-        case .gemini: return "gemini-2.5-flash"
-        case .ollama: return "llama3.2"
+        case .openAI: return "gpt-6-luna"
+        case .anthropic: return "claude-sonnet-5-5"
+        case .gemini: return "gemini-3.8-flash"
+        case .ollama: return "qwen3.5:4b"
         }
     }
 }

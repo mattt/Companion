@@ -3,6 +3,8 @@ import SwiftUI
 struct ContentView: View {
     @Environment(ServerStore.self) private var store
     @State private var columnVisibility = NavigationSplitViewVisibility.all
+    @AppStorage(AppSettingsKey.autoConnectOnLaunch) private var autoConnectOnLaunch = false
+    @State private var didAutoConnect = false
 
     var body: some View {
         @Bindable var store = store
@@ -73,6 +75,13 @@ struct ContentView: View {
         #if os(macOS)
             .frame(minWidth: 800, idealWidth: 1200, maxWidth: .infinity, maxHeight: .infinity)
         #endif
+        .task {
+            guard !didAutoConnect else { return }
+            didAutoConnect = true
+            if autoConnectOnLaunch {
+                store.connectAllServers()
+            }
+        }
     }
 }
 
