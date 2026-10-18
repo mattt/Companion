@@ -71,6 +71,7 @@ struct ToolDetailView: View {
             .frame(maxWidth: .infinity)
             .padding()
         }
+        .softTopScrollEdgeEffect()
         #if !os(macOS)
             .navigationTitle(tool.displayTitle ?? tool.name)
             .navigationBarTitleDisplayMode(.large)

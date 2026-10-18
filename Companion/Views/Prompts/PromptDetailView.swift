@@ -195,6 +195,7 @@ struct PromptDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
+        .softTopScrollEdgeEffect()
         .navigationTitle(prompt.name)
     }
 

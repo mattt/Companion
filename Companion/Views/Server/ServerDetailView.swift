@@ -23,6 +23,7 @@ struct ServerDetailView: View {
                     isConnecting: isConnecting
                 )
             }
+            .softTopScrollEdgeEffect()
             .navigationTitle(server.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -97,6 +98,7 @@ struct ServerDetailView: View {
                             isConnecting: isConnecting
                         )
                     }
+                    .softTopScrollEdgeEffect()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ServerConnectionStateView(
@@ -209,20 +211,23 @@ private struct ServerConnectionStatus: View {
     let isConnecting: Bool
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(
-                systemName: isConnecting
-                    ? "clock.circle.fill" : (isConnected ? "circle.fill" : "circle")
-            )
-            .foregroundColor(isConnecting ? .orange : (isConnected ? .green : .red))
-            .font(.system(size: 10))
+        HStack(spacing: 5) {
+            if isConnecting {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Image(systemName: "circle.fill")
+                    .foregroundColor(isConnected ? .green : .red)
+                    .font(.system(size: 9))
+            }
             Text(
                 isConnecting
-                    ? "Connecting..." : (isConnected ? "Connected" : "Disconnected")
+                    ? "Connecting…" : (isConnected ? "Connected" : "Disconnected")
             )
-            .font(.caption)
+            .font(.callout)
             .foregroundColor(.secondary)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

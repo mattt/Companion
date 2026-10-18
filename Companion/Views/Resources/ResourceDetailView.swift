@@ -360,6 +360,7 @@ struct ResourceDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
         }
+        .softTopScrollEdgeEffect()
         .navigationTitle(displayName)
     }
 
