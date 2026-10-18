@@ -52,6 +52,48 @@ Record the macOS and Xcode versions with the results.
   in Application Support.
 - [ ] Connect again and confirm that tools load.
 
+## Protocol features
+
+- [ ] On the server detail screen, click "Ping".
+  Confirm that it reports the server as reachable.
+- [ ] Call the `trigger-long-running-operation` tool.
+  Confirm that progress appears while it runs.
+  Call it again and click "Cancel".
+  Confirm that the call stops.
+- [ ] Call the `get-structured-content` tool for New York.
+  Confirm that a Structured Content section appears
+  and that the tool detail shows an Output Schema section.
+- [ ] In the Server Log section, change the logging level.
+  Call `toggle-simulated-logging`.
+  Confirm that log messages appear, then toggle logging off.
+- [ ] Call `trigger-sampling-request`.
+  Confirm that a Sampling Request sheet appears.
+  Generate a response, send it,
+  and confirm that the tool result contains the generated text.
+- [ ] Call `trigger-elicitation-request`.
+  Confirm that a form appears, submit it,
+  and confirm that the tool result reports your input.
+- [ ] In Settings, confirm that the sampling provider and model
+  match what you expect.
+  If you use an API key, confirm that sampling still works
+  after you quit and relaunch the app.
+
+## Roots, headers, and authentication
+
+- [ ] Edit the server and add a root folder.
+  Call `get-roots-list`.
+  Confirm that the result contains the folder you added.
+- [ ] Add an environment variable in the edit sheet.
+  Reconnect and call `get-env`.
+  Confirm that the variable appears.
+- [ ] Add a second server over HTTP
+  (`npx @modelcontextprotocol/server-everything streamableHttp`,
+  URL `http://127.0.0.1:3001/mcp`).
+  Add a custom header and confirm that the server still connects.
+- [ ] Subscribe to a resource that supports subscriptions.
+  Call `toggle-subscriber-updates`.
+  Confirm that the resource shows an update notice.
+
 ## Other platforms
 
 - [ ] Build for iOS Simulator and visionOS Simulator.

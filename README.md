@@ -11,18 +11,31 @@ It's built using the
 
 ![Screenshot of Companion on macOS showing MCP tool detail](/Assets/companion-macos-tool-detail.png)
 
-> [!IMPORTANT]  
-> Companion is in early development and is still missing some important features,
-> including authentication, roots, and sampling.
+> [!IMPORTANT]
+> Companion is in early development.
+> It implements the MCP client feature set through protocol version 2025-11-25,
+> with two exceptions.
+> Sampling runs without tool use,
+> so a server that asks for sampling with tools gets a text completion.
+> The experimental Tasks feature is not supported by the Swift SDK yet.
 >
-> For a more complete MCP debugging experience, check out the
+> For another MCP debugging experience, check out the
 > [MCP Inspector](https://modelcontextprotocol.io/docs/tools/inspector).
 
 ## Features
 
-- [x] Connect to local and remote MCP servers
-- [x] Easily browse available prompts, resources, and tools
-- [x] Call tools, generate prompts with arguments, and download resources
+- [x] Connect to local (STDIO) and remote (Streamable HTTP) MCP servers
+- [x] Browse prompts, resources, and tools, with live list updates
+- [x] Call tools with progress reporting, cancellation, and structured output
+- [x] Generate prompts and read resources,
+  with argument completions and resource subscriptions
+- [x] View server log messages and set the logging level
+- [x] Ping servers to check that they respond
+- [x] Answer sampling requests with Apple Foundation Models
+  or your own OpenAI, Anthropic, Gemini, or Ollama model
+- [x] Respond to elicitation requests in form and URL modes
+- [x] Share per-server roots with servers that ask for them
+- [x] Authenticate with custom headers, a bearer token, or OAuth 2.1 sign-in
 
 ## Getting Started
 
