@@ -212,14 +212,18 @@ struct ServerInformationView: View {
 
             // Server Instructions
             VStack(alignment: .leading, spacing: 12) {
-                Label("Instructions", systemImage: "doc.text")
-                    .font(.headline)
+                HStack {
+                    Label("Instructions", systemImage: "doc.text")
+                        .font(.headline)
+                    Spacer()
+                    if let instructions = server.instructions {
+                        CopyButton(text: instructions)
+                    }
+                }
 
                 if let instructions = server.instructions {
-                    Text(instructions)
+                    MarkdownTextView(markdown: instructions)
                         .foregroundColor(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .textSelection(.enabled)
                 } else {
                     Text("No instructions provided by the server.")
                         .foregroundColor(.secondary)

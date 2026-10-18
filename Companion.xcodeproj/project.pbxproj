@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C0FFEE032F10000100C0FF01 /* AnyLanguageModel in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE022F10000100C0FF01 /* AnyLanguageModel */; };
 		F82EF4F22DFDAC70006F10F1 /* JSONSchema in Frameworks */ = {isa = PBXBuildFile; productRef = F82EF4F12DFDAC70006F10F1 /* JSONSchema */; };
 		F82EF4F52DFDB069006F10F1 /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = F82EF4F42DFDB069006F10F1 /* MCP */; };
 		F8AF14792DF8564400B83292 /* SystemPackage in Frameworks */ = {isa = PBXBuildFile; productRef = F8AF14782DF8564400B83292 /* SystemPackage */; };
 		F8BE15542E18215E00D1708C /* URITemplate in Frameworks */ = {isa = PBXBuildFile; productRef = F8BE15532E18215E00D1708C /* URITemplate */; };
-		C0FFEE032F10000100C0FF01 /* AnyLanguageModel in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE022F10000100C0FF01 /* AnyLanguageModel */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -38,7 +38,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		C0FFEE042F10000100C0FF01 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		C0FFEE042F10000100C0FF01 /* Exceptions for "Companion" folder in "Companion" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -51,7 +51,7 @@
 		F81DA9A22DEAC58400DE9718 /* Companion */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				C0FFEE042F10000100C0FF01 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				C0FFEE042F10000100C0FF01 /* Exceptions for "Companion" folder in "Companion" target */,
 			);
 			path = Companion;
 			sourceTree = "<group>";
@@ -683,6 +683,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		C0FFEE012F10000100C0FF01 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/AnyLanguageModel";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
 		F82EF4F02DFDAC70006F10F1 /* XCRemoteSwiftPackageReference "JSONSchema" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/mattt/JSONSchema";
@@ -715,17 +723,14 @@
 				minimumVersion = 1.1.0;
 			};
 		};
-		C0FFEE012F10000100C0FF01 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/huggingface/AnyLanguageModel";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.0.0;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C0FFEE022F10000100C0FF01 /* AnyLanguageModel */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0FFEE012F10000100C0FF01 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */;
+			productName = AnyLanguageModel;
+		};
 		F82EF4F12DFDAC70006F10F1 /* JSONSchema */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F82EF4F02DFDAC70006F10F1 /* XCRemoteSwiftPackageReference "JSONSchema" */;
@@ -745,11 +750,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F8BE15522E18215E00D1708C /* XCRemoteSwiftPackageReference "URITemplate" */;
 			productName = URITemplate;
-		};
-		C0FFEE022F10000100C0FF01 /* AnyLanguageModel */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = C0FFEE012F10000100C0FF01 /* XCRemoteSwiftPackageReference "AnyLanguageModel" */;
-			productName = AnyLanguageModel;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

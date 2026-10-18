@@ -31,6 +31,10 @@ struct ServerLogView: View {
                 .labelsHidden()
                 .fixedSize()
 
+                CopyButton(isDisabled: server.logMessages.isEmpty) {
+                    ServerLogMessage.plainText(for: server.logMessages)
+                }
+
                 Button("Clear") {
                     store.clearLogMessages(serverID: server.id)
                 }

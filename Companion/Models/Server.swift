@@ -156,6 +156,15 @@ struct ServerLogMessage: Identifiable, Hashable, Codable, Sendable {
     var logger: String?
     var data: MCP.Value
 
+    /// Log messages as plain text, one per line, for copying.
+    static func plainText(for messages: [ServerLogMessage]) -> String {
+        messages.map { message in
+            let time = message.date.formatted(.iso8601)
+            let logger = message.logger.map { " \($0)" } ?? ""
+            return "\(time) [\(message.level.displayName)]\(logger) \(message.text)"
+        }.joined(separator: "\n")
+    }
+
     /// A short text representation of the log data.
     var text: String {
         switch data {
