@@ -1,4 +1,206 @@
+import MCP
 import SwiftUI
+import UniformTypeIdentifiers
+
+// MARK: - Form row models
+
+struct KeyValueRow: Identifiable, Equatable {
+    var id = UUID()
+    var key: String = ""
+    var value: String = ""
+
+    static func rows(from dictionary: [String: String]?) -> [KeyValueRow] {
+        guard let dictionary, !dictionary.isEmpty else { return [] }
+        return dictionary.keys.sorted().map { key in
+            KeyValueRow(key: key, value: dictionary[key] ?? "")
+        }
+    }
+
+    static func dictionary(from rows: [KeyValueRow]) -> [String: String]? {
+        var result: [String: String] = [:]
+        for row in rows {
+            let key = row.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { continue }
+            result[key] = row.value
+        }
+        return result.isEmpty ? nil : result
+    }
+}
+
+struct RootRow: Identifiable, Equatable {
+    var id = UUID()
+    var uri: String = ""
+    var name: String = ""
+
+    static func rows(from roots: [MCP.Root]) -> [RootRow] {
+        roots.map { RootRow(uri: $0.uri, name: $0.name ?? "") }
+    }
+
+    static func roots(from rows: [RootRow]) -> [MCP.Root] {
+        rows.compactMap { row in
+            let uri = row.uri.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !uri.isEmpty else { return nil }
+            let name = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return MCP.Root(uri: uri, name: name.isEmpty ? nil : name)
+        }
+    }
+}
+
+// MARK: - Key-value editor (environment variables and HTTP headers)
+
+struct KeyValueEditorView: View {
+    let title: String
+    @Binding var rows: [KeyValueRow]
+    var keyPlaceholder: String = "Key"
+    var valuePlaceholder: String = "Value"
+    var isDisabled: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    rows.append(KeyValueRow())
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+                .disabled(isDisabled)
+            }
+
+            if rows.isEmpty {
+                Text("None")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach($rows) { $row in
+                HStack(spacing: 8) {
+                    TextField(keyPlaceholder, text: $row.key)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                    TextField(valuePlaceholder, text: $row.value)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                    Button(role: .destructive) {
+                        rows.removeAll { $0.id == row.id }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                }
+                .disabled(isDisabled)
+            }
+        }
+    }
+}
+
+// MARK: - Roots editor
+
+struct RootsEditorView: View {
+    @Binding var rows: [RootRow]
+    var isDisabled: Bool = false
+
+    @State private var showingFolderPicker = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Roots")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showingFolderPicker = true
+                } label: {
+                    Label("Add Folder", systemImage: "folder.badge.plus")
+                }
+                .disabled(isDisabled)
+            }
+
+            Text("Folders this server may work in. The server asks for them with roots/list.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if rows.isEmpty {
+                Text("None")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            ForEach($rows) { $row in
+                HStack(spacing: 8) {
+                    TextField("Name (optional)", text: $row.name)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 160)
+                    TextField("file:///path/to/folder", text: $row.uri)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                        .font(.system(.body, design: .monospaced))
+                    Button(role: .destructive) {
+                        rows.removeAll { $0.id == row.id }
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                }
+                .disabled(isDisabled)
+            }
+        }
+        .fileImporter(
+            isPresented: $showingFolderPicker,
+            allowedContentTypes: [.folder]
+        ) { result in
+            if case .success(let url) = result {
+                rows.append(
+                    RootRow(uri: url.absoluteString, name: url.lastPathComponent))
+            }
+        }
+    }
+}
+
+// MARK: - HTTP authentication fields
+
+struct HTTPAuthFields: View {
+    @Binding var bearerToken: String
+    @Binding var useOAuth: Bool
+    @Binding var oauthClientID: String
+    @Binding var oauthClientSecret: String
+    var isDisabled: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Authentication")
+                .font(.headline)
+
+            SecureField("Bearer Token (optional)", text: $bearerToken)
+                .textFieldStyle(.roundedBorder)
+                .disableAutocorrection(true)
+
+            Toggle("Use OAuth 2.1 sign-in", isOn: $useOAuth)
+
+            if useOAuth {
+                TextField("OAuth Client ID (optional)", text: $oauthClientID)
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+                SecureField("OAuth Client Secret (optional)", text: $oauthClientSecret)
+                    .textFieldStyle(.roundedBorder)
+                    .disableAutocorrection(true)
+                Text(
+                    "Leave the client ID empty to register automatically "
+                        + "when the server supports dynamic client registration. "
+                        + "Companion opens your browser to sign in. "
+                        + "Tokens and secrets stay in your Keychain."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(isDisabled)
+    }
+}
 
 // MARK: - Transport Type (View Model)
 

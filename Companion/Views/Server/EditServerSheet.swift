@@ -11,6 +11,13 @@ struct EditServerSheet: View {
     @State private var command: String
     @State private var arguments: String
     @State private var url: String
+    @State private var envRows: [KeyValueRow]
+    @State private var headerRows: [KeyValueRow]
+    @State private var bearerToken: String
+    @State private var useOAuth: Bool
+    @State private var oauthClientID: String
+    @State private var oauthClientSecret: String
+    @State private var rootRows: [RootRow]
     @FocusState private var isNameFieldFocused: Bool
 
     @Environment(ServerStore.self) private var serverStore
@@ -43,6 +50,21 @@ struct EditServerSheet: View {
         self._arguments = State(
             initialValue: config.arguments?.joined(separator: " ") ?? "")
         self._url = State(initialValue: config.url ?? "")
+        self._envRows = State(initialValue: KeyValueRow.rows(from: config.env))
+        self._headerRows = State(initialValue: KeyValueRow.rows(from: config.headers))
+
+        let settingsStore = ServerSettingsStore()
+        let keychain = KeychainStore()
+        let sidecar = settingsStore.settings(forServerNamed: server.name)
+        self._rootRows = State(initialValue: RootRow.rows(from: sidecar.roots))
+        self._useOAuth = State(initialValue: sidecar.useOAuth)
+        self._oauthClientID = State(initialValue: sidecar.oauthClientID ?? "")
+        self._bearerToken = State(
+            initialValue: keychain.string(
+                for: KeychainStore.bearerTokenAccount(serverName: server.name)) ?? "")
+        self._oauthClientSecret = State(
+            initialValue: keychain.string(
+                for: KeychainStore.oauthClientSecretAccount(serverName: server.name)) ?? "")
     }
 
     private var isValid: Bool {
@@ -85,6 +107,7 @@ struct EditServerSheet: View {
 
             // Form
             #if os(macOS)
+                ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Server Name")
@@ -126,6 +149,32 @@ struct EditServerSheet: View {
                         )
                     }
 
+                    if transportType == .stdio {
+                        KeyValueEditorView(
+                            title: "Environment Variables",
+                            rows: $envRows,
+                            keyPlaceholder: "Variable",
+                            isDisabled: testModel.isTesting
+                        )
+                    } else {
+                        KeyValueEditorView(
+                            title: "Headers",
+                            rows: $headerRows,
+                            keyPlaceholder: "Header",
+                            isDisabled: testModel.isTesting
+                        )
+
+                        HTTPAuthFields(
+                            bearerToken: $bearerToken,
+                            useOAuth: $useOAuth,
+                            oauthClientID: $oauthClientID,
+                            oauthClientSecret: $oauthClientSecret,
+                            isDisabled: testModel.isTesting
+                        )
+                    }
+
+                    RootsEditorView(rows: $rootRows, isDisabled: testModel.isTesting)
+
                     TestConnectionSection(
                         isTesting: testModel.isTesting,
                         hasSucceeded: testModel.hasSucceeded,
@@ -137,6 +186,7 @@ struct EditServerSheet: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 20)
+                }
 
                 Spacer(minLength: 20)
             #else
@@ -173,6 +223,24 @@ struct EditServerSheet: View {
                             }
                         }
                     }
+
+                    Section {
+                        KeyValueEditorView(
+                            title: "Headers", rows: $headerRows, keyPlaceholder: "Header")
+                    }
+
+                    Section {
+                        HTTPAuthFields(
+                            bearerToken: $bearerToken,
+                            useOAuth: $useOAuth,
+                            oauthClientID: $oauthClientID,
+                            oauthClientSecret: $oauthClientSecret
+                        )
+                    }
+
+                    Section {
+                        RootsEditorView(rows: $rootRows)
+                    }
                 }
                 .formStyle(.grouped)
             #endif
@@ -186,7 +254,7 @@ struct EditServerSheet: View {
             )
         }
         #if os(macOS)
-            .frame(width: 500, height: 600)
+            .frame(width: 540, height: 720)
         #else
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
@@ -199,38 +267,61 @@ struct EditServerSheet: View {
         }
     }
 
-    private func testConnection() {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let configuration: ConfigFile.Entry
-
+    private func currentConfiguration() -> ConfigFile.Entry? {
         #if os(macOS)
             switch transportType {
             case .stdio:
                 let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedCommand.isEmpty else { return nil }
 
                 let trimmedArgs = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                 let argArray =
                     trimmedArgs.isEmpty ? [] : trimmedArgs.split(separator: " ").map(String.init)
 
-                configuration = ConfigFile.Entry(stdio: trimmedCommand, arguments: argArray)
+                return .stdio(
+                    .init(
+                        command: trimmedCommand,
+                        args: argArray,
+                        env: KeyValueRow.dictionary(from: envRows)))
 
             case .http:
                 let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedUrl.isEmpty else { return nil }
 
-                configuration = ConfigFile.Entry(http: trimmedUrl)
+                return .streamableHTTP(
+                    .init(url: trimmedUrl, headers: KeyValueRow.dictionary(from: headerRows)))
             }
         #else
             let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedUrl.isEmpty else { return }
+            guard !trimmedUrl.isEmpty else { return nil }
 
-            configuration = ConfigFile.Entry(http: trimmedUrl)
+            return .streamableHTTP(
+                .init(url: trimmedUrl, headers: KeyValueRow.dictionary(from: headerRows)))
         #endif
+    }
 
-        let testServer = Server(
-            name: trimmedName.isEmpty ? "Test Server" : trimmedName,
-            configuration: configuration
+    /// Saves sidecar settings under the server's current name.
+    /// `updateServer` migrates them if the user renames the server.
+    private func saveSidecar() {
+        let clientID = oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let settings = ServerSidecarSettings(
+            roots: RootRow.roots(from: rootRows),
+            useOAuth: useOAuth,
+            oauthClientID: clientID.isEmpty ? nil : clientID
         )
+        serverStore.saveSidecarSettings(
+            settings,
+            bearerToken: bearerToken.isEmpty ? nil : bearerToken,
+            oauthClientSecret: oauthClientSecret.isEmpty ? nil : oauthClientSecret,
+            forServerNamed: server.name
+        )
+    }
+
+    private func testConnection() {
+        guard let configuration = currentConfiguration() else { return }
+
+        saveSidecar()
+        let testServer = Server(name: server.name, configuration: configuration)
 
         testModel.test(testServer) { server in
             try await serverStore.testConnection(server)
@@ -239,35 +330,9 @@ struct EditServerSheet: View {
 
     private func saveServer() {
         let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return }
+        guard !trimmedName.isEmpty, let configuration = currentConfiguration() else { return }
 
-        let configuration: ConfigFile.Entry
-
-        #if os(macOS)
-            switch transportType {
-            case .stdio:
-                let trimmedCommand = command.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedCommand.isEmpty else { return }
-
-                let trimmedArgs = arguments.trimmingCharacters(in: .whitespacesAndNewlines)
-                let argArray =
-                    trimmedArgs.isEmpty ? [] : trimmedArgs.split(separator: " ").map(String.init)
-
-                configuration = ConfigFile.Entry(stdio: trimmedCommand, arguments: argArray)
-
-            case .http:
-                let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedUrl.isEmpty else { return }
-
-                configuration = ConfigFile.Entry(http: trimmedUrl)
-            }
-        #else
-            let trimmedUrl = url.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedUrl.isEmpty else { return }
-
-            configuration = ConfigFile.Entry(http: trimmedUrl)
-        #endif
-
+        saveSidecar()
         onSave(trimmedName, configuration)
     }
 
