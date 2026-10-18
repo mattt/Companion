@@ -31,6 +31,22 @@ struct ContentView: View {
                 .navigationSplitViewStyle(.balanced)
             }
         }
+        .sheet(
+            item: Binding(
+                get: { store.featureCoordinator.pendingSamplingRequests.first },
+                set: { _ in }
+            )
+        ) { request in
+            SamplingRequestView(request: request)
+        }
+        .sheet(
+            item: Binding(
+                get: { store.featureCoordinator.pendingElicitationRequests.first },
+                set: { _ in }
+            )
+        ) { request in
+            ElicitationView(request: request)
+        }
         .sheet(item: $store.sheet) { sheet in
             switch sheet {
             case .addServer:

@@ -6,6 +6,7 @@ struct SidebarView: View {
     @FocusState private var isFocused: Bool
 
     @State private var expandedServers: Set<String> = []
+    @State private var showingSettings = false
 
 
     var body: some View {
@@ -30,12 +31,37 @@ struct SidebarView: View {
             isFocused = true
         }
         .toolbar {
+            #if os(macOS)
+                ToolbarItem(placement: .automatic) {
+                    SettingsLink {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+            #else
+                ToolbarItem(placement: .automatic) {
+                    Button(action: { showingSettings = true }) {
+                        Label("Settings", systemImage: "gear")
+                    }
+                }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { store.presentAddServer() }) {
                     Label("Add Server", systemImage: "plus")
                 }
             }
         }
+        #if !os(macOS)
+            .sheet(isPresented: $showingSettings) {
+                NavigationStack {
+                    SettingsView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showingSettings = false }
+                            }
+                        }
+                }
+            }
+        #endif
     }
 
     // Extract list content into a separate function

@@ -13,5 +13,11 @@ struct CompanionApp: App {
             .windowStyle(.hiddenTitleBar)
             .windowToolbarStyle(.unified)
         #endif
+
+        #if os(macOS)
+            Settings {
+                SettingsView()
+            }
+        #endif
     }
 }
