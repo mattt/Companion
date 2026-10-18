@@ -15,4 +15,19 @@ extension MCP.Tool {
         }
         return try? JSONDecoder().decode(JSONSchema.self, from: data)
     }
+
+    /// The tool output schema decoded as a `JSONSchema` value.
+    var outputJSONSchema: JSONSchema? {
+        guard let outputSchema,
+            let data = try? JSONEncoder().encode(outputSchema)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(JSONSchema.self, from: data)
+    }
+
+    /// The best human-readable title for display.
+    var displayTitle: String? {
+        title ?? annotations.title
+    }
 }

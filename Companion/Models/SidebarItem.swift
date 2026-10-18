@@ -44,13 +44,13 @@ enum SidebarItem: Hashable, Identifiable, Equatable {
         case .tools:
             return "Tools"
         case .prompt(let prompt):
-            return prompt.name
+            return prompt.title ?? prompt.name
         case .resource(let resource):
-            return resource.name.nonempty ?? resource.uri
+            return resource.title ?? resource.name.nonempty ?? resource.uri
         case .resourceTemplate(let template):
-            return template.name.nonempty ?? template.uriTemplate
+            return template.title ?? template.name.nonempty ?? template.uriTemplate
         case .tool(let tool):
-            return tool.name
+            return tool.displayTitle ?? tool.name
         }
     }
 

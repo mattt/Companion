@@ -25,6 +25,18 @@ struct ServerCapabilitiesView: View {
     private var capabilityGroups: [CapabilityGroup] {
         var groups: [CapabilityGroup] = []
 
+        // Completions
+        if capabilities.completions != nil {
+            groups.append(
+                CapabilityGroup(
+                    id: "completions",
+                    title: "Completions",
+                    description: "Suggests argument values",
+                    icon: "text.cursor",
+                    features: []
+                ))
+        }
+
         // Core capabilities
         if capabilities.logging != nil {
             groups.append(

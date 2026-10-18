@@ -14,6 +14,8 @@ struct ResourceDetailView: View {
     @State private var resourceReadResult: MCP.ReadResource.Result?
     @State private var errorMessage: String?
     @State private var readTask: Task<Void, Never>?
+    @State private var isTogglingSubscription = false
+    @State private var subscriptionError: String?
 
     init(resource: Resource, serverId: String) {
         self.resource = resource
@@ -41,6 +43,36 @@ struct ResourceDetailView: View {
 
     private var displayMimeType: String? {
         resource?.mimeType ?? template?.mimeType
+    }
+
+    private var displayTitle: String? {
+        resource?.title ?? template?.title
+    }
+
+    private var displaySize: Int? {
+        resource?.size
+    }
+
+    private var displayAnnotations: Resource.Annotations? {
+        resource?.annotations ?? template?.annotations
+    }
+
+    private var liveServer: Server? {
+        serverStore.server(id: serverId)
+    }
+
+    private var supportsSubscriptions: Bool {
+        liveServer?.capabilities?.resources?.subscribe == true
+    }
+
+    private var isSubscribed: Bool {
+        guard let resource else { return false }
+        return liveServer?.subscribedResourceURIs.contains(resource.uri) == true
+    }
+
+    private var hasUpdate: Bool {
+        guard let resource else { return false }
+        return liveServer?.updatedResourceURIs.contains(resource.uri) == true
     }
 
     private var displayDescription: String? {
@@ -155,6 +187,36 @@ struct ResourceDetailView: View {
                                     Spacer()
                                 }
                             }
+
+                            if let title = displayTitle {
+                                metadataRow(icon: "textformat", text: title)
+                            }
+
+                            if let size = displaySize {
+                                metadataRow(
+                                    icon: "externaldrive",
+                                    text: formatFileSize(size))
+                            }
+
+                            if let annotations = displayAnnotations {
+                                if let audience = annotations.audience, !audience.isEmpty {
+                                    metadataRow(
+                                        icon: "person.2",
+                                        text: "Audience: "
+                                            + audience.map(\.rawValue).joined(
+                                                separator: ", "))
+                                }
+                                if let priority = annotations.priority {
+                                    metadataRow(
+                                        icon: "star",
+                                        text: "Priority: \(priority.formatted())")
+                                }
+                                if let lastModified = annotations.lastModified {
+                                    metadataRow(
+                                        icon: "clock",
+                                        text: "Modified: \(lastModified)")
+                                }
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,6 +229,46 @@ struct ResourceDetailView: View {
                     .background(.fill.tertiary)
                     .cornerRadius(12)
                 #endif
+
+                // Subscription (only for regular resources on supporting servers)
+                if !isTemplate, supportsSubscriptions {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Subscription", systemImage: "bell")
+                            .font(.headline)
+
+                        Toggle(
+                            "Notify when this resource changes",
+                            isOn: Binding(
+                                get: { isSubscribed },
+                                set: { toggleSubscription($0) }
+                            )
+                        )
+                        .disabled(isTogglingSubscription)
+
+                        if hasUpdate {
+                            Label(
+                                "This resource changed. Read it again to see the new content.",
+                                systemImage: "arrow.triangle.2.circlepath"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        }
+
+                        if let subscriptionError {
+                            Text(subscriptionError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    #if os(visionOS)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    #else
+                        .background(.fill.secondary)
+                        .cornerRadius(10)
+                    #endif
+                }
 
                 // Content Preview (only for regular resources, not templates)
                 if !isTemplate {
@@ -293,6 +395,43 @@ struct ResourceDetailView: View {
         readTask?.cancel()
         readTask = nil
         isReadingResource = false
+    }
+
+    @ViewBuilder
+    private func metadataRow(icon: String, text: String) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 18, alignment: .center)
+
+            Text(text)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.secondary)
+                .textSelection(.enabled)
+
+            Spacer()
+        }
+    }
+
+    private func toggleSubscription(_ subscribe: Bool) {
+        guard let resource else { return }
+        isTogglingSubscription = true
+        subscriptionError = nil
+        let uri = resource.uri
+        Task {
+            do {
+                if subscribe {
+                    try await serverStore.subscribeToResource(serverID: serverId, uri: uri)
+                } else {
+                    try await serverStore.unsubscribeFromResource(
+                        serverID: serverId, uri: uri)
+                }
+            } catch {
+                subscriptionError = error.localizedDescription
+            }
+            isTogglingSubscription = false
+        }
     }
 
     private func copyURI() {

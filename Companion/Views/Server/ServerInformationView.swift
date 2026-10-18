@@ -5,6 +5,16 @@ struct ServerInformationView: View {
     let serverStatus: Server.Status
     let isConnecting: Bool
 
+    @Environment(ServerStore.self) private var store
+    @State private var pingState: PingState = .idle
+
+    private enum PingState: Equatable {
+        case idle
+        case pinging
+        case succeeded
+        case failed(String)
+    }
+
     private var isConnected: Bool {
         serverStatus.isConnected
     }
@@ -57,11 +67,20 @@ struct ServerInformationView: View {
 
             // Server Info
             VStack(alignment: .leading, spacing: 12) {
-                Label("Server Information", systemImage: "info.circle")
-                    .font(.headline)
+                HStack {
+                    Label("Server Information", systemImage: "info.circle")
+                        .font(.headline)
+                    Spacer()
+                    pingButton
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
+                        if server.serverInfo?.icons != nil {
+                            IconView(
+                                icons: server.serverInfo?.icons, size: 32,
+                                fallbackSystemImage: "server.rack")
+                        }
                         Text("Name:")
                             .foregroundColor(.secondary)
                         if let name = server.serverInfo?.name,
@@ -73,6 +92,38 @@ struct ServerInformationView: View {
                         } else {
                             Text("Unknown")
                                 .italic()
+                        }
+                    }
+
+                    if let title = server.serverInfo?.title, !title.isEmpty {
+                        HStack {
+                            Text("Title:")
+                                .foregroundColor(.secondary)
+                            Text(title)
+                                .fontWeight(.medium)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if let description = server.serverInfo?.description,
+                        !description.isEmpty
+                    {
+                        HStack(alignment: .top) {
+                            Text("Description:")
+                                .foregroundColor(.secondary)
+                            Text(description)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if let websiteUrl = server.serverInfo?.websiteUrl,
+                        let url = URL(string: websiteUrl)
+                    {
+                        HStack {
+                            Text("Website:")
+                                .foregroundColor(.secondary)
+                            Link(websiteUrl, destination: url)
+                                .lineLimit(1)
                         }
                     }
 
@@ -184,9 +235,66 @@ struct ServerInformationView: View {
                 .cornerRadius(10)
             #endif
 
+            // Server Log
+            if server.capabilities?.logging != nil {
+                ServerLogView(server: server)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    #if os(visionOS)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    #else
+                        .background(.fill.secondary)
+                        .cornerRadius(10)
+                    #endif
+            }
+
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
+    }
+
+    @ViewBuilder
+    private var pingButton: some View {
+        HStack(spacing: 8) {
+            switch pingState {
+            case .succeeded:
+                Label("Reachable", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.caption)
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                    .lineLimit(1)
+            case .idle, .pinging:
+                EmptyView()
+            }
+
+            Button {
+                ping()
+            } label: {
+                if pingState == .pinging {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text("Ping")
+                }
+            }
+            .disabled(!isConnected || pingState == .pinging)
+        }
+    }
+
+    private func ping() {
+        pingState = .pinging
+        let serverID = server.id
+        Task {
+            do {
+                try await store.ping(serverID: serverID)
+                pingState = .succeeded
+            } catch {
+                pingState = .failed(error.localizedDescription)
+            }
+        }
     }
 }

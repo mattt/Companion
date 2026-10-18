@@ -6,6 +6,7 @@ struct ToolDetailView: View {
     let serverId: String?
 
     @State private var showingInputSchema = false
+    @State private var showingOutputSchema = false
 
     init(tool: Tool, serverId: String? = nil) {
         self.tool = tool
@@ -16,7 +17,10 @@ struct ToolDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
-                    if let title = tool.annotations.title {
+                    if tool.icons != nil {
+                        IconView(icons: tool.icons, size: 40, fallbackSystemImage: "hammer")
+                    }
+                    if let title = tool.displayTitle {
                         Text(title)
                             .font(.title)
                             .fontWeight(.bold)
@@ -52,6 +56,14 @@ struct ToolDetailView: View {
                     isExpanded: $showingInputSchema
                 )
 
+                if tool.outputJSONSchema != nil {
+                    ToolSchemaView(
+                        schema: tool.outputJSONSchema,
+                        title: "Output Schema",
+                        isExpanded: $showingOutputSchema
+                    )
+                }
+
                 // Tool Calling
                 ToolCallView(tool: tool, serverId: serverId)
                     .id("\(serverId ?? "")-\(tool.name)")
@@ -60,7 +72,7 @@ struct ToolDetailView: View {
             .padding()
         }
         #if !os(macOS)
-            .navigationTitle(tool.annotations.title ?? tool.name)
+            .navigationTitle(tool.displayTitle ?? tool.name)
             .navigationBarTitleDisplayMode(.large)
         #endif
     }

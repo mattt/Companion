@@ -4,6 +4,7 @@ import JSONSchema
 
 struct ToolSchemaView: View {
     let schema: JSONSchema?
+    var title: String = "Input Schema"
     @Binding var isExpanded: Bool
     
     var body: some View {
@@ -12,7 +13,7 @@ struct ToolSchemaView: View {
                 Button(action: { isExpanded.toggle() }) {
                     HStack {
                         Label(
-                            "Input Schema",
+                            title,
                             systemImage: "chevron.left.forwardslash.chevron.right"
                         )
                         .font(.headline)

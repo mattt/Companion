@@ -115,20 +115,14 @@ struct ResourceTemplateView: View {
                         .fontWeight(.medium)
 
                     ForEach(parameters, id: \.self) { parameter in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(parameter)
-                                .font(.caption)
-                                .fontWeight(.medium)
-
-                            TextField(
-                                "Enter \(parameter)",
-                                text: Binding(
-                                    get: { templateArguments[parameter] ?? "" },
-                                    set: { templateArguments[parameter] = $0 }
-                                )
-                            )
-                            .textFieldStyle(.roundedBorder)
-                        }
+                        TemplateParameterField(
+                            parameter: parameter,
+                            value: Binding(
+                                get: { templateArguments[parameter] ?? "" },
+                                set: { templateArguments[parameter] = $0 }
+                            ),
+                            completionProvider: completionProvider(for: parameter)
+                        )
                     }
                 }
                 .padding()
@@ -221,6 +215,30 @@ struct ResourceTemplateView: View {
         return true
     }
 
+    private func completionProvider(
+        for parameter: String
+    ) -> ((String) async -> [String])? {
+        guard let serverId,
+            serverStore.server(id: serverId)?.capabilities?.completions != nil
+        else { return nil }
+
+        let resourceURI = template.uriTemplate
+        let context = templateArguments.filter {
+            $0.key != parameter && !$0.value.isEmpty
+        }
+        let store = serverStore
+        return { value in
+            let completion = try? await store.completeResourceArgument(
+                serverID: serverId,
+                resourceURI: resourceURI,
+                argumentName: parameter,
+                argumentValue: value,
+                context: context.isEmpty ? nil : context
+            )
+            return completion?.values ?? []
+        }
+    }
+
     private func extractTemplateParameters(from template: String) -> [String] {
         let uriTemplate = try? URITemplate(template)
         return uriTemplate?.variables ?? []
@@ -246,5 +264,36 @@ struct ResourceTemplateView: View {
             }
         }
         return nil
+    }
+}
+
+private struct TemplateParameterField: View {
+    let parameter: String
+    @Binding var value: String
+    var completionProvider: ((String) async -> [String])?
+
+    @State private var suggestions: [String] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(parameter)
+                .font(.caption)
+                .fontWeight(.medium)
+
+            TextField("Enter \(parameter)", text: $value)
+                .textFieldStyle(.roundedBorder)
+
+            if !suggestions.isEmpty {
+                CompletionSuggestionsView(suggestions: suggestions) { suggestion in
+                    value = suggestion
+                }
+            }
+        }
+        .task(id: value) {
+            guard let completionProvider else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            suggestions = await completionProvider(value)
+        }
     }
 }

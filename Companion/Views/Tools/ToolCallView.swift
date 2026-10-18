@@ -12,6 +12,7 @@ struct ToolCallView: View {
     @State private var errorMessage: String?
     @State private var formInputs: [String: String] = [:]
     @State private var callTask: Task<Void, Never>?
+    @State private var progress: ToolProgress?
 
     var body: some View {
         ScrollView {
@@ -44,14 +45,23 @@ struct ToolCallView: View {
                 
                 // Show progress indicator when calling tool
                 if isCallingTool {
-                    HStack {
-                        ProgressView()
-                            .progressViewStyle(
-                                CircularProgressViewStyle(tint: .secondary)
-                            )
-                            .scaleEffect(0.8)
-                        Text("Calling...")
-                            .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            ProgressView()
+                                .progressViewStyle(
+                                    CircularProgressViewStyle(tint: .secondary)
+                                )
+                                .scaleEffect(0.8)
+                            Text(progress?.message ?? "Calling...")
+                                .foregroundColor(.secondary)
+                        }
+                        if let fraction = progress?.fraction {
+                            ProgressView(value: fraction)
+                        } else if let progress {
+                            Text(progressText(progress))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -110,6 +120,16 @@ struct ToolCallView: View {
                             }
                         }
                         
+                        if let structuredContent = result.structuredContent {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Structured Content")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                ContentDisplayHelpers.textContentView(
+                                    Self.prettyJSON(structuredContent))
+                            }
+                        }
+
                         if result.isError == true {
                             Text("Tool execution returned an error")
                                 .font(.caption)
@@ -530,6 +550,7 @@ struct ToolCallView: View {
         isCallingTool = true
         toolCallResult = nil
         errorMessage = nil
+        progress = nil
 
         let arguments = Self.convertFormInputsToArguments(formInputs)
         let toolName = tool.name
@@ -537,7 +558,12 @@ struct ToolCallView: View {
         callTask = Task {
             do {
                 let result = try await serverStore.callTool(
-                    serverID: serverId, name: toolName, arguments: arguments)
+                    serverID: serverId, name: toolName, arguments: arguments,
+                    progressHandler: { newProgress in
+                        Task { @MainActor in
+                            progress = newProgress
+                        }
+                    })
                 guard !Task.isCancelled else { return }
                 toolCallResult = result
             } catch is CancellationError {
@@ -547,6 +573,7 @@ struct ToolCallView: View {
                 errorMessage = error.localizedDescription
             }
             isCallingTool = false
+            progress = nil
         }
     }
 
@@ -554,6 +581,25 @@ struct ToolCallView: View {
         callTask?.cancel()
         callTask = nil
         isCallingTool = false
+        progress = nil
+    }
+
+    private func progressText(_ progress: ToolProgress) -> String {
+        if let total = progress.total {
+            return "\(progress.progress.formatted()) of \(total.formatted())"
+        }
+        return progress.progress.formatted()
+    }
+
+    private static func prettyJSON(_ value: MCP.Value) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(value),
+            let string = String(data: data, encoding: .utf8)
+        else {
+            return "\(value)"
+        }
+        return string
     }
 
     private static func convertFormInputsToArguments(_ formInputs: [String: String])

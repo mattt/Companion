@@ -37,12 +37,28 @@ struct PromptDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 4) {
+                    if prompt.icons != nil {
+                        IconView(
+                            icons: prompt.icons, size: 40,
+                            fallbackSystemImage: "text.bubble")
+                    }
                     // Title
                     #if os(macOS)
-                        Text(prompt.name)
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .textSelection(.enabled)
+                        if let title = prompt.title {
+                            Text(title)
+                                .font(.title)
+                                .fontWeight(.bold)
+                                .textSelection(.enabled)
+                            Text(prompt.name)
+                                .font(.system(.title3, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                        } else {
+                            Text(prompt.name)
+                                .font(.title)
+                                .fontWeight(.bold)
+                                .textSelection(.enabled)
+                        }
                     #endif
 
                     // Description (if available)
@@ -66,7 +82,8 @@ struct PromptDetailView: View {
                                 value: argumentValues[argument.name] ?? "",
                                 onValueChange: { newValue in
                                     argumentValues[argument.name] = newValue
-                                }
+                                },
+                                completionProvider: completionProvider(for: argument)
                             )
                         }
                     } else {
@@ -224,6 +241,31 @@ struct PromptDetailView: View {
         isCallingPrompt = false
     }
 
+    private func completionProvider(
+        for argument: Prompt.Argument
+    ) -> ((String) async -> [String])? {
+        guard let serverId,
+            serverStore.server(id: serverId)?.capabilities?.completions != nil
+        else { return nil }
+
+        let promptName = prompt.name
+        let argumentName = argument.name
+        let context = argumentValues.filter {
+            $0.key != argumentName && !$0.value.isEmpty
+        }
+        let store = serverStore
+        return { value in
+            let completion = try? await store.completePromptArgument(
+                serverID: serverId,
+                promptName: promptName,
+                argumentName: argumentName,
+                argumentValue: value,
+                context: context.isEmpty ? nil : context
+            )
+            return completion?.values ?? []
+        }
+    }
+
     private func formatMessageContent(_ content: Prompt.Message.Content) -> String {
         switch content {
         case .text(let text):
@@ -248,11 +290,14 @@ struct ArgumentInputView: View {
     let argument: Prompt.Argument
     let value: String
     let onValueChange: (String) -> Void
+    var completionProvider: ((String) async -> [String])?
+
+    @State private var suggestions: [String] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(argument.name)
+                Text(argument.title ?? argument.name)
                     .font(.subheadline)
                     .fontWeight(.medium)
 
@@ -284,7 +329,39 @@ struct ArgumentInputView: View {
                 )
             )
             .textFieldStyle(.roundedBorder)
+
+            if !suggestions.isEmpty {
+                CompletionSuggestionsView(suggestions: suggestions) { suggestion in
+                    onValueChange(suggestion)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: value) {
+            guard let completionProvider else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            suggestions = await completionProvider(value)
+        }
+    }
+}
+
+/// Tappable completion suggestions from `completion/complete`.
+struct CompletionSuggestionsView: View {
+    let suggestions: [String]
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        onSelect(suggestion)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        }
     }
 }
