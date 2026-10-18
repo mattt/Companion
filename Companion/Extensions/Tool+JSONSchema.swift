@@ -13,7 +13,12 @@ extension MCP.Tool {
         guard let data = try? JSONEncoder().encode(inputSchema) else {
             return nil
         }
-        return try? JSONDecoder().decode(JSONSchema.self, from: data)
+        let decoder = JSONDecoder()
+        // Keep the author's property order so forms match the schema layout.
+        if let order = JSONSchema.extractSchemaPropertyOrder(from: data) {
+            decoder.userInfo[JSONSchema.propertyOrderUserInfoKey] = order
+        }
+        return try? decoder.decode(JSONSchema.self, from: data)
     }
 
     /// The tool output schema decoded as a `JSONSchema` value.
