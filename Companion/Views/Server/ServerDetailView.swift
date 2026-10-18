@@ -119,13 +119,25 @@ struct ServerDetailView: View {
                     }
                 #endif
 
-                // Connection status as separate toolbar item
-                ToolbarItem(placement: .automatic) {
-                    ServerConnectionStatus(
-                        isConnected: isConnected,
-                        isConnecting: isConnecting
-                    )
-                }
+                // Connection status at the trailing edge, next to the action menu.
+                // It is not interactive, so hide the Liquid Glass capsule
+                // that toolbar items get by default.
+                #if os(macOS)
+                    ToolbarItem(id: "connection-status", placement: .primaryAction) {
+                        ServerConnectionStatus(
+                            isConnected: isConnected,
+                            isConnecting: isConnecting
+                        )
+                    }
+                    .hiddenSharedBackgroundIfAvailable()
+                #else
+                    ToolbarItem(placement: .primaryAction) {
+                        ServerConnectionStatus(
+                            isConnected: isConnected,
+                            isConnecting: isConnecting
+                        )
+                    }
+                #endif
 
                 // Action menu as separate toolbar item
                 ToolbarItem(placement: .primaryAction) {
