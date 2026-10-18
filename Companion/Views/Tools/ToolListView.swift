@@ -7,20 +7,37 @@ struct ToolListView: View {
     let serverId: String?
     let columnVisibility: NavigationSplitViewVisibility
     @State private var selectedTool: Tool?
-    @State private var leftPaneWidth: CGFloat = 350
+    @State private var leftPaneWidth: CGFloat
+    @State private var widthPersistTask: Task<Void, Never>?
     @State private var searchText: String = ""
     @FocusState private var isListFocused: Bool
+
+    init(
+        tools: [Tool],
+        serverId: String?,
+        columnVisibility: NavigationSplitViewVisibility
+    ) {
+        self.tools = tools
+        self.serverId = serverId
+        self.columnVisibility = columnVisibility
+        _leftPaneWidth = State(initialValue: ListPaneWidth.stored())
+    }
 
     private var filteredTools: [Tool] {
         if searchText.isEmpty {
             return tools.sorted(by: { $0.name < $1.name })
         } else {
-            return tools.filter { tool in
-                tool.name.localizedCaseInsensitiveContains(searchText)
-                    || tool.description?.localizedCaseInsensitiveContains(searchText) == true
-                    || tool.annotations.title?.localizedCaseInsensitiveContains(searchText)
-                        == true
-            }.sorted(by: { $0.name < $1.name })
+            return tools.filter { $0.matchesFilter(searchText) }
+                .sorted(by: { $0.name < $1.name })
+        }
+    }
+
+    private func scheduleWidthPersist(_ width: CGFloat) {
+        widthPersistTask?.cancel()
+        widthPersistTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            ListPaneWidth.store(width)
         }
     }
 
@@ -94,13 +111,17 @@ struct ToolListView: View {
                                             && self.leftPaneWidth != newCalculatedWidth
                                         {
                                             self.leftPaneWidth = newCalculatedWidth
+                                            self.scheduleWidthPersist(newCalculatedWidth)
                                         }
                                     }
                                 }
                             )
                         }
                     }
-                    .frame(minWidth: 250, idealWidth: 350, maxWidth: 400)
+                    .frame(
+                        minWidth: ListPaneWidth.range.lowerBound,
+                        idealWidth: leftPaneWidth,
+                        maxWidth: ListPaneWidth.range.upperBound)
 
                     if let selectedTool = selectedTool {
                         ToolDetailView(
@@ -149,6 +170,9 @@ struct ToolListView: View {
                 selectedTool = firstTool
             }
         }
+        .onDisappear {
+            ListPaneWidth.store(leftPaneWidth)
+        }
         .onChange(of: searchText, initial: true) { _, newValue in
             // When search changes, ensure selected tool is still visible
             if let selected = selectedTool,
@@ -192,7 +216,7 @@ private struct ToolRowView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    if let title = tool.annotations.title {
+                    if let title = tool.displayTitle {
                         Text(title)
                             .font(.subheadline)
                             .fontWeight(.medium)
@@ -226,5 +250,14 @@ private struct ToolRowView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+extension MCP.Tool {
+    /// Whether the tool matches a filter string by name, title, or description.
+    func matchesFilter(_ searchText: String) -> Bool {
+        name.localizedCaseInsensitiveContains(searchText)
+            || displayTitle?.localizedCaseInsensitiveContains(searchText) == true
+            || description?.localizedCaseInsensitiveContains(searchText) == true
     }
 }

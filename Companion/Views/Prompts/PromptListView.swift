@@ -6,19 +6,37 @@ struct PromptListView: View {
     let serverId: String?
     let columnVisibility: NavigationSplitViewVisibility
     @State private var selectedPrompt: Prompt?
-    @State private var leftPaneWidth: CGFloat = 350
+    @State private var leftPaneWidth: CGFloat
+    @State private var widthPersistTask: Task<Void, Never>?
     @State private var searchText: String = ""
     @FocusState private var isListFocused: Bool
+
+    init(
+        prompts: [Prompt],
+        serverId: String?,
+        columnVisibility: NavigationSplitViewVisibility
+    ) {
+        self.prompts = prompts
+        self.serverId = serverId
+        self.columnVisibility = columnVisibility
+        _leftPaneWidth = State(initialValue: ListPaneWidth.stored())
+    }
 
     private var filteredPrompts: [Prompt] {
         if searchText.isEmpty {
             return prompts.sorted(by: { $0.name < $1.name })
         } else {
-            return prompts.filter { prompt in
-                prompt.name.localizedCaseInsensitiveContains(searchText)
-                    || (prompt.description?.localizedCaseInsensitiveContains(searchText)
-                        ?? false)
-            }.sorted(by: { $0.name < $1.name })
+            return prompts.filter { $0.matchesFilter(searchText) }
+                .sorted(by: { $0.name < $1.name })
+        }
+    }
+
+    private func scheduleWidthPersist(_ width: CGFloat) {
+        widthPersistTask?.cancel()
+        widthPersistTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            ListPaneWidth.store(width)
         }
     }
 
@@ -91,13 +109,17 @@ struct PromptListView: View {
                                             && self.leftPaneWidth != newCalculatedWidth
                                         {
                                             self.leftPaneWidth = newCalculatedWidth
+                                            self.scheduleWidthPersist(newCalculatedWidth)
                                         }
                                     }
                                 }
                             )
                         }
                     }
-                    .frame(minWidth: 250, idealWidth: 350, maxWidth: 400)
+                    .frame(
+                        minWidth: ListPaneWidth.range.lowerBound,
+                        idealWidth: leftPaneWidth,
+                        maxWidth: ListPaneWidth.range.upperBound)
 
                     if let selectedPrompt = selectedPrompt {
                         PromptDetailView(prompt: selectedPrompt, serverId: serverId)
@@ -140,6 +162,9 @@ struct PromptListView: View {
                 selectedPrompt = firstPrompt
             }
         }
+        .onDisappear {
+            ListPaneWidth.store(leftPaneWidth)
+        }
         .onChange(of: searchText) { _, _ in
             // When search changes, ensure selected prompt is still visible
             if let selected = selectedPrompt,
@@ -180,9 +205,18 @@ struct PromptRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(prompt.name)
-                .font(.subheadline)
-                .fontWeight(.medium)
+            if let title = prompt.title {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                Text(prompt.name)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.secondary)
+            } else {
+                Text(prompt.name)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
 
             if let description = prompt.description, !description.isEmpty {
                 Text(description)
@@ -314,5 +348,14 @@ struct FlowLayout: Layout {
         }
 
         return (size: CGSize(width: containerSize.width, height: maxY), offsets: result)
+    }
+}
+
+extension MCP.Prompt {
+    /// Whether the prompt matches a filter string by name, title, or description.
+    func matchesFilter(_ searchText: String) -> Bool {
+        name.localizedCaseInsensitiveContains(searchText)
+            || title?.localizedCaseInsensitiveContains(searchText) == true
+            || description?.localizedCaseInsensitiveContains(searchText) == true
     }
 }

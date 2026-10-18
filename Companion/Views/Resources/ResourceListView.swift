@@ -25,7 +25,12 @@ private enum ResourceItem: Hashable {
     }
 
     var displayName: String {
-        name
+        switch self {
+        case .resource(let res):
+            return res.title ?? res.name
+        case .template(let temp):
+            return temp.title ?? temp.name
+        }
     }
 
     var uri: String {
@@ -62,9 +67,32 @@ struct ResourceListView: View {
     let serverId: String
     let columnVisibility: NavigationSplitViewVisibility
     @State private var selectedResourceID: String?
-    @State private var leftPaneWidth: CGFloat = 350
+    @State private var leftPaneWidth: CGFloat
+    @State private var widthPersistTask: Task<Void, Never>?
     @State private var searchText: String = ""
     @FocusState private var isListFocused: Bool
+
+    init(
+        resources: [Resource],
+        templates: [Resource.Template],
+        serverId: String,
+        columnVisibility: NavigationSplitViewVisibility
+    ) {
+        self.resources = resources
+        self.templates = templates
+        self.serverId = serverId
+        self.columnVisibility = columnVisibility
+        _leftPaneWidth = State(initialValue: ListPaneWidth.stored())
+    }
+
+    private func scheduleWidthPersist(_ width: CGFloat) {
+        widthPersistTask?.cancel()
+        widthPersistTask = Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            ListPaneWidth.store(width)
+        }
+    }
 
     private var allResources: [ResourceItem] {
         let resourceItems = resources.map { ResourceItem.resource($0) }
@@ -78,6 +106,7 @@ struct ResourceListView: View {
         } else {
             return allResources.filter { item in
                 item.name.localizedCaseInsensitiveContains(searchText)
+                    || item.displayName.localizedCaseInsensitiveContains(searchText)
                     || item.uri.localizedCaseInsensitiveContains(searchText)
                     || (item.description?.localizedCaseInsensitiveContains(searchText) ?? false)
                     || (item.mimeType?.localizedCaseInsensitiveContains(searchText) ?? false)
@@ -160,13 +189,17 @@ struct ResourceListView: View {
                                             && self.leftPaneWidth != newCalculatedWidth
                                         {
                                             self.leftPaneWidth = newCalculatedWidth
+                                            self.scheduleWidthPersist(newCalculatedWidth)
                                         }
                                     }
                                 }
                             )
                         }
                     }
-                    .frame(minWidth: 250, idealWidth: 350, maxWidth: 400)
+                    .frame(
+                        minWidth: ListPaneWidth.range.lowerBound,
+                        idealWidth: leftPaneWidth,
+                        maxWidth: ListPaneWidth.range.upperBound)
 
                     if let selectedResource = selectedResource {
                         switch selectedResource {
@@ -220,6 +253,9 @@ struct ResourceListView: View {
                 selectedResourceID = firstResource.id
             }
         }
+        .onDisappear {
+            ListPaneWidth.store(leftPaneWidth)
+        }
         .onChange(of: searchText) { _, _ in
             // When search changes, ensure selected resource is still visible
             if let selected = selectedResource,
@@ -260,7 +296,7 @@ private struct ResourceRowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(resource.name)
+            Text(resource.displayName)
                 .font(.subheadline)
                 .fontWeight(.medium)
 
