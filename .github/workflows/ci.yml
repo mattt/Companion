@@ -23,6 +23,7 @@ jobs:
             -workspace Companion.xcodeproj/project.xcworkspace \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
+            -skipMacroValidation \
             build
 
       - name: Build (iOS Simulator)
@@ -31,6 +32,7 @@ jobs:
             -workspace Companion.xcodeproj/project.xcworkspace \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
+            -skipMacroValidation \
             build
 
       - name: Build (visionOS Simulator)
@@ -39,6 +41,7 @@ jobs:
             -workspace Companion.xcodeproj/project.xcworkspace \
             -destination 'generic/platform=visionOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
+            -skipMacroValidation \
             build
 
       - name: Test (unit tests, macOS)
@@ -47,4 +50,5 @@ jobs:
             -workspace Companion.xcodeproj/project.xcworkspace \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
+            -skipMacroValidation \
             test -only-testing:CompanionTests
