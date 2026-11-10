@@ -15,5 +15,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>SUFeedURL</key>
+	<string>https://github.com/mattt/Companion/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>6GqAumM9xpgcWG4QFF6rQqnAt8lyOROYxXY90kOhbOc=</string>
 </dict>
 </plist>
