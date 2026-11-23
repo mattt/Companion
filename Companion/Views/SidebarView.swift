@@ -158,7 +158,7 @@ struct SidebarView: View {
                         #endif
                 } else {
                     Image(systemName: "bolt.circle.fill")
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(.primary)
                         #if os(macOS)
                             .font(.system(size: 14))
                             .frame(width: 18)
@@ -178,7 +178,7 @@ struct SidebarView: View {
                 #else
                     .font(.system(size: 15))
                 #endif
-                .foregroundColor(.accentColor)
+                .foregroundStyle(.primary)
 
                 Spacer()
             }
@@ -276,7 +276,7 @@ struct SidebarView: View {
     private func sidebarRow(for sidebarItem: SidebarItem) -> some View {
         HStack(spacing: 12) {
             icon(for: sidebarItem)
-                .foregroundColor(.accentColor)
+                .foregroundStyle(.secondary)
                 #if os(macOS)
                     .font(.system(size: 14))
                     .frame(width: 18)
@@ -400,7 +400,7 @@ struct SidebarView: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "server.rack")
-                        .foregroundColor(.accentColor)
+                        .foregroundStyle(.secondary)
                         .font(.system(size: 16, weight: .medium))
                         .frame(width: 20)
 
@@ -523,7 +523,7 @@ struct SidebarView: View {
     private func serverInformationRow(for server: Server) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "info.circle")
-                .foregroundColor(.accentColor)
+                .foregroundStyle(.secondary)
                 #if os(macOS)
                     .font(.system(size: 14))
                     .frame(width: 18)
@@ -748,7 +748,7 @@ struct ConnectionButton: View {
                         )
                 } else if isConnected {
                     Image(systemName: isHovered ? "bolt.slash" : "bolt.fill")
-                        .foregroundColor(isHovered ? .red : .accentColor)
+                        .foregroundColor(isHovered ? .red : .primary)
                 } else {
                     Image(systemName: "bolt")
                         .foregroundColor(.secondary)

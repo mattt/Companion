@@ -212,6 +212,10 @@ private struct ToolRowView: View {
     let tool: Tool
     @Binding var selectedTool: Tool?
 
+    private var isSelected: Bool {
+        selectedTool?.name == tool.name
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -223,7 +227,7 @@ private struct ToolRowView: View {
 
                         Text(tool.name)
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(isSelected ? .primary : .secondary)
                     } else {
                         Text(tool.name)
                             .font(.system(.subheadline, design: .monospaced))
@@ -233,7 +237,7 @@ private struct ToolRowView: View {
                     if let description = tool.description, !description.isEmpty {
                         Text(description)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(isSelected ? .primary : .secondary)
                             .lineLimit(2)
                     }
                 }
@@ -243,7 +247,7 @@ private struct ToolRowView: View {
                 HStack(spacing: 4) {
                     if let destructive = tool.annotations.destructiveHint, destructive {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(selectedTool?.name == tool.name ? .primary : .red)
+                            .foregroundColor(isSelected ? .primary : .red)
                             .font(.caption)
                     }
                 }

@@ -240,7 +240,7 @@ struct ServerFormHeader: View {
         HStack(alignment: .top, spacing: 12) {
             Image(icon)
                 .font(.largeTitle)
-                .foregroundColor(.accentColor)
+                .foregroundStyle(.secondary)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -290,7 +290,7 @@ struct TransportTypeCard: View {
         HStack(spacing: 12) {
             Image(systemName: type.icon)
                 .font(.system(size: 16))
-                .foregroundColor(.accentColor)
+                .foregroundStyle(.secondary)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {

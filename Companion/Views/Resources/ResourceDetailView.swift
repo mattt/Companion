@@ -116,7 +116,7 @@ struct ResourceDetailView: View {
                     // Large Icon
                     Image(systemName: resourceIcon)
                         .font(.system(size: 48))
-                        .foregroundColor(isTemplate ? .orange : .blue)
+                        .foregroundStyle(.secondary)
                         .frame(width: 64, height: 64)
                         .background(.fill.tertiary)
                         .cornerRadius(12)
@@ -126,7 +126,7 @@ struct ResourceDetailView: View {
                         ) {
                             Image(systemName: resourceIcon)
                                 .font(.system(size: 32))
-                                .foregroundColor(isTemplate ? .orange : .blue)
+                                .foregroundStyle(.secondary)
                                 .frame(width: 48, height: 48)
                                 .background(.fill.tertiary)
                                 .cornerRadius(8)
@@ -138,10 +138,10 @@ struct ResourceDetailView: View {
                             HStack {
                                 Image(systemName: "text.bubble")
                                     .font(.caption)
-                                    .foregroundColor(.orange)
+                                    .foregroundStyle(.secondary)
                                 Text("Resource Template")
                                     .font(.caption)
-                                    .foregroundColor(.orange)
+                                    .foregroundStyle(.secondary)
                                     .fontWeight(.medium)
                             }
                         }
@@ -656,7 +656,7 @@ private struct QuickLookPreviewView: View {
                             VStack(spacing: 8) {
                                 Image(systemName: fileIcon)
                                     .font(.largeTitle)
-                                    .foregroundColor(.blue)
+                                    .foregroundStyle(.secondary)
 
                                 Text(fileTypeDescription)
                                     .font(.headline)

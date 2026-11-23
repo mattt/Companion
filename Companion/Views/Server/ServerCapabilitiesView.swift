@@ -228,7 +228,7 @@ struct CapabilityGroupView: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: group.icon)
                     .font(.title2)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(.secondary)
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 1) {

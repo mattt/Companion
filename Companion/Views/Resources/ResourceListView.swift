@@ -172,8 +172,11 @@ struct ResourceListView: View {
                                 id: \.id,
                                 selection: $selectedResourceID
                             ) { resourceItem in
-                                ResourceRowView(resource: resourceItem)
-                                    .tag(resourceItem.id)
+                                ResourceRowView(
+                                    resource: resourceItem,
+                                    isSelected: selectedResourceID == resourceItem.id
+                                )
+                                .tag(resourceItem.id)
                             }
                             .listStyle(.sidebar)
                             .focused($isListFocused)
@@ -293,6 +296,7 @@ struct ResourceListView: View {
 
 private struct ResourceRowView: View {
     let resource: ResourceItem
+    var isSelected = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -302,13 +306,13 @@ private struct ResourceRowView: View {
 
             Text(resource.uri)
                 .font(.system(.caption, design: .monospaced))
-                .foregroundColor(.secondary)
+                .foregroundColor(isSelected ? .primary : .secondary)
                 .lineLimit(1)
 
             if let description = resource.description {
                 Text(description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isSelected ? .primary : .secondary)
                     .lineLimit(3)
             }
 
@@ -319,8 +323,8 @@ private struct ResourceRowView: View {
                         .font(.caption2)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.orange.opacity(0.2))
-                        .foregroundColor(.orange)
+                        .background(Color.secondary.opacity(0.12))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .cornerRadius(3)
                 }
 
@@ -330,8 +334,8 @@ private struct ResourceRowView: View {
                         .font(.caption2)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
-                        .background(Color.blue.opacity(0.2))
-                        .foregroundColor(.blue)
+                        .background(Color.secondary.opacity(0.12))
+                        .foregroundStyle(isSelected ? .primary : .secondary)
                         .cornerRadius(3)
                 }
 
