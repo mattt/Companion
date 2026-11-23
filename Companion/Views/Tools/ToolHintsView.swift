@@ -19,7 +19,7 @@ struct ToolHintsView: View {
                             description: readOnly
                                 ? "This tool does not modify its environment"
                                 : "This tool can modify its environment",
-                            color: readOnly ? .green : .orange
+                            color: readOnly ? .secondary : .orange
                         )
                     }
 
@@ -32,7 +32,7 @@ struct ToolHintsView: View {
                             description: destructive
                                 ? "May perform destructive updates"
                                 : "Performs only additive updates",
-                            color: destructive ? .red : .green
+                            color: destructive ? .red : .secondary
                         )
                     }
 
@@ -44,7 +44,7 @@ struct ToolHintsView: View {
                             description: idempotent
                                 ? "Repeated calls have no additional effect"
                                 : "Each call may have different effects",
-                            color: idempotent ? .blue : .gray
+                            color: .secondary
                         )
                     }
 
@@ -55,7 +55,7 @@ struct ToolHintsView: View {
                             description: openWorld
                                 ? "Interacts with external entities"
                                 : "Limited to a closed domain",
-                            color: openWorld ? .purple : .brown
+                            color: .secondary
                         )
                     }
                 }

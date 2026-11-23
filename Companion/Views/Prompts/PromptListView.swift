@@ -91,8 +91,11 @@ struct PromptListView: View {
                         } else {
                             List(selection: $selectedPrompt) {
                                 ForEach(filteredPrompts, id: \.name) { prompt in
-                                    PromptRowView(prompt: prompt)
-                                        .tag(prompt)
+                                    PromptRowView(
+                                        prompt: prompt,
+                                        isSelected: selectedPrompt?.name == prompt.name
+                                    )
+                                    .tag(prompt)
                                 }
                             }
                             .listStyle(.sidebar)
@@ -202,6 +205,7 @@ struct PromptListView: View {
 
 struct PromptRowView: View {
     let prompt: Prompt
+    var isSelected = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -211,7 +215,7 @@ struct PromptRowView: View {
                     .fontWeight(.medium)
                 Text(prompt.name)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isSelected ? .primary : .secondary)
             } else {
                 Text(prompt.name)
                     .font(.subheadline)
@@ -221,7 +225,7 @@ struct PromptRowView: View {
             if let description = prompt.description, !description.isEmpty {
                 Text(description)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isSelected ? .primary : .secondary)
                     .lineLimit(3)
             }
 
@@ -231,14 +235,14 @@ struct PromptRowView: View {
                     GridRow {
                         Text("Args:")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(isSelected ? .primary : .secondary)
                             .gridColumnAlignment(.leading)
 
                         FlowLayout(spacing: 4) {
                             ForEach(arguments, id: \.name) { argument in
                                 Text(argument.name)
                                     .font(.caption.monospaced())
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(isSelected ? .primary : .secondary)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
                                     .background(

@@ -42,13 +42,13 @@ struct WelcomeView: View {
             // Callout
             HStack(spacing: 12) {
                 Image("mcp.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.secondary)
                     .font(.system(size: 24))
                 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("MCP servers provide tools, prompts, and resources to AI workflows")
                         .font(.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                     
                     Link(destination: URL(string: "https://huggingface.co/learn/mcp-course/en/unit0/introduction")!) {
@@ -58,7 +58,7 @@ struct WelcomeView: View {
                             Image(systemName: "arrow.up.right.square")
                         }
                         .font(.caption)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.primary)
                     }
                     #if os(macOS)
                         .pointerStyle(.link)
@@ -66,10 +66,10 @@ struct WelcomeView: View {
                 }
             }
             .padding(12)
-            .background(.blue.opacity(0.1))
+            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(.blue, lineWidth: 1)
+                    .stroke(.separator, lineWidth: 1)
             )
             .clipped(antialiased: true)
             .padding(.top, 8)
