@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AddServerSheet: View {
     @Binding var isPresented: Bool
-    let onAdd: (String, ConfigFile.Entry) -> Void
+    let onAdd: (String, ConfigFile.Entry, ServerConnectionSettings) -> Void
     let onCancel: (() -> Void)?
 
     @State private var serverName = ""
@@ -26,22 +26,18 @@ struct AddServerSheet: View {
     @Environment(ServerStore.self) private var serverStore
     @State private var testModel = ConnectionTestModel()
 
-    private var isValid: Bool {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return false }
-
-        #if os(macOS)
-            switch transportType {
-            case .stdio:
-                return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            case .http:
-                return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-        #else
-            return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        #endif
+    private var trimmedName: String {
+        serverName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
+    private var isNameAvailable: Bool {
+        serverStore.isNameAvailable(trimmedName)
+    }
+
+    private var isValid: Bool {
+        !trimmedName.isEmpty && isNameAvailable && canTestConnection
+    }
+
     private var canTestConnection: Bool {
         #if os(macOS)
             switch transportType {
@@ -82,6 +78,10 @@ struct AddServerSheet: View {
                                 }
                             }
                             .onChange(of: serverName, initial: true) { _, _ in testModel.reset() }
+                        if !isNameAvailable {
+                            Text("A server with this name already exists.")
+                                .font(.caption)
+                        }
                     }
 
                     // Transport Configuration
@@ -163,6 +163,10 @@ struct AddServerSheet: View {
                                 }
                             }
                             .onChange(of: serverName) { _, _ in testModel.reset() }
+                        if !isNameAvailable {
+                            Text("A server with this name already exists.")
+                                .font(.caption)
+                        }
                     }
 
                     Section(
@@ -266,45 +270,32 @@ struct AddServerSheet: View {
         #endif
     }
 
-    private func saveSidecar(forName name: String) {
-        let clientID = oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let settings = ServerSidecarSettings(
-            roots: RootRow.roots(from: rootRows),
-            useOAuth: useOAuth,
-            oauthClientID: clientID.isEmpty ? nil : clientID
-        )
-        serverStore.saveSidecarSettings(
-            settings,
-            bearerToken: bearerToken.isEmpty ? nil : bearerToken,
-            oauthClientSecret: oauthClientSecret.isEmpty ? nil : oauthClientSecret,
-            forServerNamed: name
+    private var connectionSettings: ServerConnectionSettings {
+        ServerConnectionSettings(
+            sidecar: ServerSidecarSettings(
+                roots: RootRow.roots(from: rootRows),
+                useOAuth: useOAuth,
+                oauthClientID: oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).nonempty
+            ),
+            bearerToken: bearerToken.nonempty,
+            oauthClientSecret: oauthClientSecret.nonempty
         )
     }
 
     private func addServer() {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty, let configuration = currentConfiguration() else { return }
-
-        saveSidecar(forName: trimmedName)
-        onAdd(trimmedName, configuration)
+        guard isValid, let configuration = currentConfiguration() else { return }
+        onAdd(trimmedName, configuration, connectionSettings)
     }
 
     private func testConnection() {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let configuration = currentConfiguration() else { return }
-
-        let name = trimmedName.isEmpty ? "Test Server" : trimmedName
-        saveSidecar(forName: name)
-
-        let testServer = Server(name: name, configuration: configuration)
-
-        testModel.test(testServer) { server in
-            try await serverStore.testConnection(server)
-        }
+        testModel.test(
+            name: trimmedName.nonempty ?? "Test Server", configuration: configuration,
+            settings: connectionSettings, using: serverStore)
     }
 }
 
 #Preview {
-    AddServerSheet(isPresented: .constant(true), onAdd: { _, _ in }, onCancel: {})
+    AddServerSheet(isPresented: .constant(true), onAdd: { _, _, _ in }, onCancel: {})
         .environment(ServerStore())
 }

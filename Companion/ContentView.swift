@@ -54,8 +54,8 @@ struct ContentView: View {
             case .addServer:
                 AddServerSheet(
                     isPresented: .constant(true),
-                    onAdd: { name, transport in
-                        store.addServer(name: name, configuration: transport)
+                    onAdd: { name, transport, settings in
+                        store.addServer(name: name, configuration: transport, settings: settings)
                         store.sheet = nil
                     },
                     onCancel: { store.sheet = nil }
@@ -64,8 +64,8 @@ struct ContentView: View {
                 EditServerSheet(
                     isPresented: .constant(true),
                     server: server,
-                    onSave: { name, transport in
-                        store.updateServer(id: server.id, name: name, configuration: transport)
+                    onSave: { name, transport, settings in
+                        store.updateServer(id: server.id, name: name, configuration: transport, settings: settings)
                         store.sheet = nil
                     },
                     onCancel: { store.sheet = nil }

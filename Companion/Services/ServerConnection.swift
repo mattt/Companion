@@ -61,7 +61,7 @@ protocol ServerConnecting: Sendable {
 
     func connect(_ server: Server) async throws -> ServerConnectionResult
     func disconnect(serverID: String) async
-    func testConnection(_ server: Server) async throws
+    func testConnection(_ server: Server, settings: ServerConnectionSettings) async throws
     func ping(serverID: String) async throws
 
     func listTools(serverID: String) async throws -> [MCP.Tool]
@@ -163,8 +163,8 @@ actor MCPServerConnections: ServerConnecting {
         Logger.connection.info("Disconnected server \(serverID, privacy: .public)")
     }
 
-    func testConnection(_ server: Server) async throws {
-        let (connection, _) = try await performConnection(server)
+    func testConnection(_ server: Server, settings: ServerConnectionSettings) async throws {
+        let (connection, _) = try await performConnection(server, draft: settings)
         await tearDown(connection)
     }
 
@@ -404,13 +404,14 @@ actor MCPServerConnections: ServerConnecting {
     /// Registers handlers for server notifications and,
     /// when a feature handler exists, for roots, sampling,
     /// and elicitation requests from the server.
-    private func registerHandlers(client: MCP.Client, server: Server) async {
+    private func registerHandlers(client: MCP.Client, server: Server, draftRoots: [MCP.Root]?) async {
         let serverID = server.id
         let serverName = server.name
 
         if let featureHandler {
             await client.withRootsHandler {
-                await featureHandler.roots(forServerNamed: serverName)
+                if let draftRoots { return draftRoots }
+                return await featureHandler.roots(forServerNamed: serverName)
             }
             await client.withSamplingHandler { parameters in
                 try await featureHandler.handleSampling(
@@ -457,7 +458,7 @@ actor MCPServerConnections: ServerConnecting {
     /// Creates a client and transport for the server configuration,
     /// performs the MCP handshake, and fetches the initial lists.
     /// A failure to fetch one list does not fail the connection.
-    private func performConnection(_ server: Server) async throws
+    private func performConnection(_ server: Server, draft: ServerConnectionSettings? = nil) async throws
         -> (LiveConnection, ServerConnectionResult)
     {
         Logger.connection.info("Connecting to server '\(server.name, privacy: .public)'")
@@ -565,9 +566,11 @@ actor MCPServerConnections: ServerConnecting {
             #endif
 
             let headers = server.configuration.headers ?? [:]
-            let bearerToken = keychain.string(
-                for: KeychainStore.bearerTokenAccount(serverName: server.name))
-            let authorizer = oauthAuthorizer(for: server)
+            let settings = draft ?? savedConnectionSettings(forServerNamed: server.name)
+            let tokenStorage: any TokenStorage = draft == nil
+                ? KeychainTokenStorage(keychain: keychain, serverName: server.name)
+                : InMemoryTokenStorage()
+            let authorizer = oauthAuthorizer(settings: settings, tokenStorage: tokenStorage)
 
             transport = HTTPClientTransport(
                 endpoint: url,
@@ -578,7 +581,7 @@ actor MCPServerConnections: ServerConnecting {
                     for (field, value) in headers {
                         modified.setValue(value, forHTTPHeaderField: field)
                     }
-                    if let bearerToken,
+                    if let bearerToken = settings.bearerToken,
                         modified.value(forHTTPHeaderField: "Authorization") == nil
                     {
                         modified.setValue(
@@ -590,7 +593,7 @@ actor MCPServerConnections: ServerConnecting {
             connection = LiveConnection(client: client, transport: transport)
         }
 
-        await registerHandlers(client: client, server: server)
+        await registerHandlers(client: client, server: server, draftRoots: draft?.sidecar.roots)
 
         do {
             let initResult = try await client.connect(transport: transport)
@@ -667,23 +670,25 @@ actor MCPServerConnections: ServerConnecting {
         }
     }
 
-    /// Builds an OAuth authorizer when the server settings enable OAuth.
-    /// With no saved client secret, the SDK registers the client
-    /// dynamically when the authorization server supports it.
-    private func oauthAuthorizer(for server: Server) -> (any HTTPClientAuthorizer)? {
-        let settings = settingsStore.settings(forServerNamed: server.name)
-        guard settings.useOAuth else { return nil }
+    private func savedConnectionSettings(forServerNamed name: String) -> ServerConnectionSettings {
+        let sidecar = settingsStore.settings(forServerNamed: name)
+        return ServerConnectionSettings(
+            sidecar: sidecar,
+            bearerToken: keychain.string(for: KeychainStore.bearerTokenAccount(serverName: name)),
+            oauthClientSecret: sidecar.useOAuth
+                ? keychain.string(for: KeychainStore.oauthClientSecretAccount(serverName: name))
+                : nil
+        )
+    }
 
-        let tokenStorage = KeychainTokenStorage(keychain: keychain, serverName: server.name)
-        let clientID =
-            settings.oauthClientID
-            ?? tokenStorage.load()?.clientID
-            ?? ""
-        let clientSecret = keychain.string(
-            for: KeychainStore.oauthClientSecretAccount(serverName: server.name))
+    private func oauthAuthorizer(
+        settings: ServerConnectionSettings, tokenStorage: any TokenStorage
+    ) -> (any HTTPClientAuthorizer)? {
+        guard settings.sidecar.useOAuth else { return nil }
+        let clientID = settings.sidecar.oauthClientID ?? tokenStorage.load()?.clientID ?? ""
 
         let authentication: OAuthConfiguration.TokenEndpointAuthentication
-        if let clientSecret, !clientSecret.isEmpty {
+        if let clientSecret = settings.oauthClientSecret, !clientSecret.isEmpty {
             authentication = .clientSecretBasic(
                 clientID: clientID, clientSecret: clientSecret)
         } else {

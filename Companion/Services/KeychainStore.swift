@@ -1,12 +1,19 @@
 import Foundation
 import Security
 
+protocol ServerSecretStoring {
+    func string(for account: String) -> String?
+    func setString(_ value: String?, for account: String)
+    func delete(account: String)
+    func rename(from oldAccount: String, to newAccount: String)
+}
+
 /// Stores small secrets in the system Keychain.
 ///
 /// Companion keeps API keys, bearer tokens, OAuth client secrets,
 /// and OAuth access tokens here instead of in `servers.json`
 /// or `UserDefaults`, where any process could read them.
-struct KeychainStore: Sendable {
+struct KeychainStore: ServerSecretStoring, Sendable {
     var service: String
 
     init(service: String = Bundle.main.bundleIdentifier ?? "me.mattt.Companion") {
