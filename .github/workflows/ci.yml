@@ -7,15 +7,23 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-26
+    strategy:
+      matrix:
+        include:
+          - runner: macos-26
+            xcode: '26.6'
+          - runner: xcode-27
+            xcode: '27.0'
+    runs-on: ${{ matrix.runner }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Show Xcode and Swift versions
         run: |
-          ls /Applications | grep Xcode
-          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
           xcodebuild -version
+          xcrun swift --version
 
       - name: Build (macOS)
         run: |
