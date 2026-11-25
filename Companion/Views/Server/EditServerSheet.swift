@@ -3,7 +3,7 @@ import SwiftUI
 struct EditServerSheet: View {
     @Binding var isPresented: Bool
     let server: Server
-    let onSave: (String, ConfigFile.Entry) -> Void
+    let onSave: (String, ConfigFile.Entry, ServerConnectionSettings) -> Void
     let onCancel: (() -> Void)?
 
     @State private var serverName: String
@@ -25,7 +25,7 @@ struct EditServerSheet: View {
 
     init(
         isPresented: Binding<Bool>, server: Server,
-        onSave: @escaping (String, ConfigFile.Entry) -> Void,
+        onSave: @escaping (String, ConfigFile.Entry, ServerConnectionSettings) -> Void,
         onCancel: (() -> Void)?
     ) {
         self._isPresented = isPresented
@@ -67,22 +67,18 @@ struct EditServerSheet: View {
                 for: KeychainStore.oauthClientSecretAccount(serverName: server.name)) ?? "")
     }
 
-    private var isValid: Bool {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else { return false }
-
-        #if os(macOS)
-            switch transportType {
-            case .stdio:
-                return !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            case .http:
-                return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-        #else
-            return !url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        #endif
+    private var trimmedName: String {
+        serverName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
+    private var isNameAvailable: Bool {
+        serverStore.isNameAvailable(trimmedName, excluding: server.id)
+    }
+
+    private var isValid: Bool {
+        !trimmedName.isEmpty && isNameAvailable && canTestConnection
+    }
+
     private var canTestConnection: Bool {
         #if os(macOS)
             switch transportType {
@@ -122,6 +118,10 @@ struct EditServerSheet: View {
                                 }
                             }
                             .onChange(of: serverName, initial: true) { _, _ in testModel.reset() }
+                        if !isNameAvailable {
+                            Text("A server with this name already exists.")
+                                .font(.caption)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -199,6 +199,10 @@ struct EditServerSheet: View {
                                     saveServer()
                                 }
                             }
+                        if !isNameAvailable {
+                            Text("A server with this name already exists.")
+                                .font(.caption)
+                        }
                     }
 
                     Section(
@@ -300,41 +304,27 @@ struct EditServerSheet: View {
         #endif
     }
 
-    /// Saves sidecar settings under the server's current name.
-    /// `updateServer` migrates them if the user renames the server.
-    private func saveSidecar() {
-        let clientID = oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let settings = ServerSidecarSettings(
-            roots: RootRow.roots(from: rootRows),
-            useOAuth: useOAuth,
-            oauthClientID: clientID.isEmpty ? nil : clientID
+    private var connectionSettings: ServerConnectionSettings {
+        ServerConnectionSettings(
+            sidecar: ServerSidecarSettings(
+                roots: RootRow.roots(from: rootRows),
+                useOAuth: useOAuth,
+                oauthClientID: oauthClientID.trimmingCharacters(in: .whitespacesAndNewlines).nonempty
+            ),
+            bearerToken: bearerToken.nonempty,
+            oauthClientSecret: oauthClientSecret.nonempty
         )
-        serverStore.saveSidecarSettings(
-            settings,
-            bearerToken: bearerToken.isEmpty ? nil : bearerToken,
-            oauthClientSecret: oauthClientSecret.isEmpty ? nil : oauthClientSecret,
-            forServerNamed: server.name
-        )
+    }
+
+    private func saveServer() {
+        guard isValid, let configuration = currentConfiguration() else { return }
+        onSave(trimmedName, configuration, connectionSettings)
     }
 
     private func testConnection() {
         guard let configuration = currentConfiguration() else { return }
-
-        saveSidecar()
-        let testServer = Server(name: server.name, configuration: configuration)
-
-        testModel.test(testServer) { server in
-            try await serverStore.testConnection(server)
-        }
+        testModel.test(
+            name: server.name, configuration: configuration,
+            settings: connectionSettings, using: serverStore)
     }
-
-    private func saveServer() {
-        let trimmedName = serverName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty, let configuration = currentConfiguration() else { return }
-
-        saveSidecar()
-        onSave(trimmedName, configuration)
-    }
-
-
 }

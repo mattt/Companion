@@ -15,7 +15,8 @@ actor FakeServerConnection: ServerConnecting {
 
     private(set) var connectCalls: [String] = []
     private(set) var disconnectCalls: [String] = []
-    private(set) var testCalls: [String] = []
+    private(set) var testCalls: [(server: Companion.Server, settings: ServerConnectionSettings)] = []
+    private(set) var cancelledTest = false
     private(set) var pingCalls: [String] = []
     private(set) var loggingLevels: [MCP.LogLevel] = []
     private(set) var subscribedURIs: [String] = []
@@ -58,8 +59,14 @@ actor FakeServerConnection: ServerConnecting {
         disconnectCalls.append(serverID)
     }
 
-    func testConnection(_ server: Companion.Server) async throws {
-        testCalls.append(server.id)
+    func testConnection(_ server: Companion.Server, settings: ServerConnectionSettings) async throws {
+        testCalls.append((server, settings))
+        do {
+            try await Task.sleep(for: connectDelay)
+        } catch is CancellationError {
+            cancelledTest = true
+            throw CancellationError()
+        }
         if let connectError {
             throw connectError
         }
@@ -167,6 +174,38 @@ final class InMemoryConfigStore: ServerConfigStoring, @unchecked Sendable {
     }
 }
 
+private final class InMemoryServerSettings: ServerSettingsStoring {
+    var values: [String: ServerSidecarSettings] = [:]
+
+    func settings(forServerNamed name: String) -> ServerSidecarSettings {
+        values[name] ?? ServerSidecarSettings()
+    }
+
+    func save(_ settings: ServerSidecarSettings, forServerNamed name: String) {
+        values[name] = settings
+    }
+
+    func removeSettings(forServerNamed name: String) {
+        values.removeValue(forKey: name)
+    }
+
+    func rename(from oldName: String, to newName: String) {
+        if let settings = values.removeValue(forKey: oldName) { values[newName] = settings }
+    }
+}
+
+private final class InMemoryServerSecrets: ServerSecretStoring {
+    var values: [String: String] = [:]
+
+    func string(for account: String) -> String? { values[account] }
+    func setString(_ value: String?, for account: String) { values[account] = value }
+    func delete(account: String) { values.removeValue(forKey: account) }
+
+    func rename(from oldAccount: String, to newAccount: String) {
+        if let value = values.removeValue(forKey: oldAccount) { values[newAccount] = value }
+    }
+}
+
 // MARK: - Helpers
 
 @MainActor
@@ -206,9 +245,13 @@ private func eventuallyAsync(
 struct ServerStoreTests {
     private func makeStore(
         connection: FakeServerConnection = FakeServerConnection(),
-        configStore: InMemoryConfigStore = InMemoryConfigStore()
+        configStore: InMemoryConfigStore = InMemoryConfigStore(),
+        settings: InMemoryServerSettings = InMemoryServerSettings(),
+        secrets: InMemoryServerSecrets = InMemoryServerSecrets()
     ) -> ServerStore {
-        ServerStore(connection: connection, configStore: configStore)
+        ServerStore(
+            connection: connection, configStore: configStore,
+            settingsStore: settings, keychain: secrets)
     }
 
     @Test func loadsServersFromConfigStore() {
@@ -239,6 +282,101 @@ struct ServerStoreTests {
         #expect(connected.availableTools.map(\.name) == ["echo"])
         #expect(connected.serverInfo?.name == "Fake")
         #expect(connected.isConnecting == false)
+    }
+
+    @Test func duplicateNamesPreserveBothSavedEntries() throws {
+        let original = ConfigFile(entries: ["One": .init(stdio: "one"), "Two": .init(stdio: "two")])
+        let config = InMemoryConfigStore(stored: original)
+        let settings = InMemoryServerSettings()
+        let secrets = InMemoryServerSecrets()
+        let store = makeStore(configStore: config, settings: settings, secrets: secrets)
+        let one = try #require(store.servers.first { $0.name == "One" })
+        let draft = ServerConnectionSettings(
+            sidecar: .init(useOAuth: true), bearerToken: "fixture", oauthClientSecret: "fixture")
+
+        store.addServer(name: "Two", configuration: .init(stdio: "new"), settings: draft)
+        store.updateServer(id: one.id, name: "Two", configuration: .init(stdio: "new"), settings: draft)
+
+        #expect(store.servers.map(\.name) == ["One", "Two"])
+        #expect(config.savedConfigs.isEmpty)
+        #expect(settings.values.isEmpty)
+        #expect(secrets.values.isEmpty)
+        #expect(store.selection == nil)
+
+        store.updateServer(id: one.id, name: "One", configuration: .init(stdio: "edited"))
+        let saved = try #require(config.savedConfigs.last)
+        let decoded = try JSONDecoder().decode(ConfigFile.self, from: JSONEncoder().encode(saved))
+        #expect(decoded.entries == ["One": .init(stdio: "edited"), "Two": .init(stdio: "two")])
+
+        store.updateServer(id: one.id, name: "Three", configuration: .init(stdio: "edited"))
+        #expect(try config.load().entries == ["Three": .init(stdio: "edited"), "Two": .init(stdio: "two")])
+    }
+
+    @Test func reusingARenamedServersOldNameKeepsBothEntriesEditable() throws {
+        let transport = Server.Configuration(stdio: "fixture")
+        let config = InMemoryConfigStore(stored: ConfigFile(entries: ["First": transport]))
+        let store = makeStore(configStore: config)
+        let original = try #require(store.servers.first)
+        store.updateServer(id: original.id, name: "Second", configuration: transport)
+        store.addServer(name: "First", configuration: transport)
+        let added = try #require(store.servers.first { $0.name == "First" })
+
+        #expect(added.id != original.id)
+        store.updateServer(id: original.id, name: "First", configuration: transport)
+        store.updateServer(id: added.id, name: "First", configuration: .init(stdio: "edited"))
+        #expect(try config.load().entries == ["First": .init(stdio: "edited"), "Second": transport])
+    }
+
+    @Test(arguments: [false, true])
+    func discardingTestConnectionPreservesActiveServer(cancelDuringTest: Bool) async throws {
+        let connection = FakeServerConnection()
+        let config = InMemoryConfigStore()
+        let settings = InMemoryServerSettings()
+        let secrets = InMemoryServerSecrets()
+        let store = makeStore(
+            connection: connection, configStore: config, settings: settings, secrets: secrets)
+        let saved = ServerConnectionSettings(
+            sidecar: .init(oauthClientID: "saved-id"), bearerToken: "saved-token",
+            oauthClientSecret: "saved-secret")
+        let transport = Server.Configuration(http: "https://fixture.invalid")
+        store.addServer(name: "Fixture", configuration: transport, settings: saved)
+        let server = try #require(store.servers.first)
+        try await eventually("saved server connects") {
+            store.server(id: server.id)?.status == .connected
+        }
+        let savedSettings = settings.values
+        let savedSecrets = secrets.values
+
+        let draft = ServerConnectionSettings(
+            sidecar: .init(roots: [.init(uri: "file:///fixture")], useOAuth: true, oauthClientID: "draft-id"),
+            bearerToken: "draft-token", oauthClientSecret: "draft-secret")
+        let model = ConnectionTestModel()
+        if cancelDuringTest { await connection.setConnectDelay(.seconds(60)) }
+        let draftTransport = cancelDuringTest ? transport : .init(http: "https://draft.invalid")
+        model.test(name: server.name, configuration: draftTransport, settings: draft, using: store)
+        try await eventuallyAsync("draft reaches the connection") {
+            await connection.testCalls.count == 1
+        }
+        if cancelDuringTest {
+            model.cancel()
+            try await eventuallyAsync("draft connection cancelled") { await connection.cancelledTest }
+        } else {
+            try await eventually("draft connection succeeds") { model.hasSucceeded }
+        }
+        model.reset()
+
+        let call = try #require(await connection.testCalls.first)
+        #expect(call.server.id != server.id)
+        #expect(call.server.configuration == draftTransport)
+        #expect(call.settings == draft)
+        #expect(settings.values == savedSettings)
+        #expect(secrets.values == savedSecrets)
+        #expect(config.savedConfigs.count == 1)
+        #expect(try config.load().entries == [server.name: transport])
+        #expect(await connection.connectCalls == [server.id])
+        #expect(await connection.disconnectCalls.isEmpty)
+        #expect(await connection.rootsChangedCalls.isEmpty)
+        #expect(store.server(id: server.id)?.status == .connected)
     }
 
     @Test func connectFailureSetsErrorStatus() async throws {

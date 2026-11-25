@@ -13,7 +13,21 @@ struct ServerSidecarSettings: Codable, Equatable, Sendable {
     var oauthClientID: String?
 }
 
-struct ServerSettingsStore: Sendable {
+/// The settings and credentials entered in the server form.
+struct ServerConnectionSettings: Equatable, Sendable {
+    var sidecar: ServerSidecarSettings
+    var bearerToken: String?
+    var oauthClientSecret: String?
+}
+
+protocol ServerSettingsStoring {
+    func settings(forServerNamed name: String) -> ServerSidecarSettings
+    func save(_ settings: ServerSidecarSettings, forServerNamed name: String)
+    func removeSettings(forServerNamed name: String)
+    func rename(from oldName: String, to newName: String)
+}
+
+struct ServerSettingsStore: ServerSettingsStoring, Sendable {
     private static let keyPrefix = "server-settings:"
 
     private var defaults: UserDefaults { .standard }

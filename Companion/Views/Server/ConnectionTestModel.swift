@@ -20,18 +20,23 @@ final class ConnectionTestModel {
     var isTesting: Bool { status == .testing }
     var hasSucceeded: Bool { status == .success }
 
-    func test(_ server: Server, perform: @escaping @MainActor (Server) async throws -> Void) {
+    func test(
+        name: String, configuration: Server.Configuration, settings: ServerConnectionSettings,
+        using store: ServerStore
+    ) {
+        let server = Server(id: UUID().uuidString, name: name, configuration: configuration)
         testTask?.cancel()
         status = .testing
         errorMessage = nil
 
         testTask = Task { [weak self] in
             do {
-                try await perform(server)
+                try await store.testConnection(server, settings: settings)
                 guard !Task.isCancelled else { return }
                 self?.status = .success
                 self?.errorMessage = nil
             } catch is CancellationError {
+                guard !Task.isCancelled else { return }
                 self?.status = .cancelled
                 self?.errorMessage = "Test cancelled"
             } catch {

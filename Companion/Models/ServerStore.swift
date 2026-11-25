@@ -32,8 +32,8 @@ final class ServerStore {
 
     private let connection: any ServerConnecting
     private let configStore: any ServerConfigStoring
-    private let settingsStore: ServerSettingsStore
-    private let keychain: KeychainStore
+    private let settingsStore: any ServerSettingsStoring
+    private let keychain: any ServerSecretStoring
 
     /// Queues sampling and elicitation requests from servers for the UI.
     let featureCoordinator: ClientFeatureCoordinator
@@ -48,8 +48,8 @@ final class ServerStore {
         connection: (any ServerConnecting)? = nil,
         configStore: any ServerConfigStoring = FileServerConfigStore(),
         featureCoordinator: ClientFeatureCoordinator = ClientFeatureCoordinator(),
-        settingsStore: ServerSettingsStore = ServerSettingsStore(),
-        keychain: KeychainStore = KeychainStore()
+        settingsStore: any ServerSettingsStoring = ServerSettingsStore(),
+        keychain: any ServerSecretStoring = KeychainStore()
     ) {
         self.featureCoordinator = featureCoordinator
         self.connection =
@@ -99,8 +99,22 @@ final class ServerStore {
 
     // MARK: - Add, update, remove
 
-    func addServer(name: String, configuration: Server.Configuration) {
-        let server = Server(name: name, configuration: configuration)
+    func isNameAvailable(_ name: String, excluding serverID: String? = nil) -> Bool {
+        !servers.contains { $0.name == name && $0.id != serverID }
+    }
+
+    func addServer(
+        name: String, configuration: Server.Configuration, settings: ServerConnectionSettings? = nil
+    ) {
+        guard isNameAvailable(name) else { return }
+        if let settings {
+            saveSidecarSettings(settings, forServerNamed: name)
+        }
+        var server = Server(name: name, configuration: configuration)
+        // A renamed server can still have the ID derived from this name and configuration.
+        if self.server(id: server.id) != nil {
+            server = Server(id: UUID().uuidString, name: name, configuration: configuration)
+        }
         servers.append(server)
         save()
         selection = .server(server)
@@ -117,12 +131,18 @@ final class ServerStore {
         )
     }
 
-    func updateServer(id: String, name: String, configuration: Server.Configuration) {
-        guard let idx = index(of: id) else { return }
+    func updateServer(
+        id: String, name: String, configuration: Server.Configuration,
+        settings: ServerConnectionSettings? = nil
+    ) {
+        guard let idx = index(of: id), isNameAvailable(name, excluding: id) else { return }
         let oldName = servers[idx].name
         let configurationChanged = servers[idx].configuration != configuration
         let wasConnected = servers[idx].status.isConnected
 
+        if let settings {
+            saveSidecarSettings(settings, forServerNamed: oldName)
+        }
         servers[idx].name = name
         servers[idx].configuration = configuration
         save()
@@ -440,32 +460,29 @@ final class ServerStore {
 
     /// Saves roots, OAuth preferences, and secrets for a server.
     ///
-    /// The add and edit sheets call this before `addServer` or
-    /// `updateServer`, so the connection reads the new values
-    /// when it starts. Changes that affect the transport
+    /// Changes that affect the transport
     /// (OAuth and bearer token) restart a connected server.
     /// Root changes notify the server without a restart.
-    func saveSidecarSettings(
-        _ settings: ServerSidecarSettings,
-        bearerToken: String?,
-        oauthClientSecret: String?,
+    private func saveSidecarSettings(
+        _ draft: ServerConnectionSettings,
         forServerNamed name: String
     ) {
+        let settings = draft.sidecar
         let oldSettings = settingsStore.settings(forServerNamed: name)
         let oldBearerToken = self.bearerToken(forServerNamed: name)
 
         settingsStore.save(settings, forServerNamed: name)
         keychain.setString(
-            bearerToken, for: KeychainStore.bearerTokenAccount(serverName: name))
+            draft.bearerToken, for: KeychainStore.bearerTokenAccount(serverName: name))
         keychain.setString(
-            oauthClientSecret,
+            draft.oauthClientSecret,
             for: KeychainStore.oauthClientSecretAccount(serverName: name))
 
         guard let server = servers.first(where: { $0.name == name }),
             server.status.isConnected
         else { return }
 
-        if oldSettings.useOAuth != settings.useOAuth || oldBearerToken != bearerToken {
+        if oldSettings.useOAuth != settings.useOAuth || oldBearerToken != draft.bearerToken {
             restart(serverID: server.id)
         } else if oldSettings.roots != settings.roots {
             let serverID = server.id
@@ -477,8 +494,8 @@ final class ServerStore {
 
     // MARK: - Calls (used by detail views)
 
-    func testConnection(_ server: Server) async throws {
-        try await connection.testConnection(server)
+    func testConnection(_ server: Server, settings: ServerConnectionSettings) async throws {
+        try await connection.testConnection(server, settings: settings)
     }
 
     func ping(serverID: String) async throws {
